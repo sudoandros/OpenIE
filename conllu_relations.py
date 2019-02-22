@@ -3,7 +3,7 @@ import json
 from tqdm import tqdm
 from pathlib import Path
 import argparse
-from udpipe_model import Model
+from udpipe_model import UDPipeModel
 
 
 def get_case(sentence, word):
@@ -142,11 +142,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("syntax_parser", choices=["syntaxnet", "udpipe"])
     parser.add_argument(
-        "dir_path", help="Path to directory containing parsed text in conllu format"
+        "directory", help="Path to directory containing parsed text in conllu format"
     )
     args = parser.parse_args()
-    dir_path = Path(args.dir_path)
-    model = Model("udpipe_models/russian-syntagrus-ud-2.2-conll18-180430.udpipe")
+    dir_path = Path(args.directory)
+    model = UDPipeModel("udpipe_models/russian-syntagrus-ud-2.2-conll18-180430.udpipe")
 
     for path in tqdm(dir_path.iterdir()):
         relations = {}

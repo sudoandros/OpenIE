@@ -8,10 +8,12 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import ufal.udpipe
+
 # ufal.udpipe.Model etc. are SWIG-magic and cannot be detected by pylint
 # pylint: disable=no-member
 
-class Model:
+
+class UDPipeModel:
     def __init__(self, path):
         """Load given model."""
         self.model = ufal.udpipe.Model.load(path)
@@ -58,15 +60,16 @@ class Model:
         """Write given ufal.udpipe.Sentence-s in the required format (conllu|horizontal|vertical)."""
 
         output_format = ufal.udpipe.OutputFormat.newOutputFormat(out_format)
-        output = ''
+        output = ""
         for sentence in sentences:
             output += output_format.writeSentence(sentence)
         output += output_format.finishDocument()
 
         return output
 
+
 # Can be used as
-#  model = Model('english-ud-1.2-160523.udpipe')
+#  model = UDPipeModel('english-ud-1.2-160523.udpipe')
 #  sentences = model.tokenize("Hi there. How are you?")
 #  for s in sentences:
 #      model.tag(s)
