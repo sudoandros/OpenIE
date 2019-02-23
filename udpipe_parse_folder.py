@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 from udpipe_model import UDPipeModel
 
-UDPIPE_MODEL_PATH = "data/udpipe_models/russian-syntagrus-ud-2.2-conll18-180430.udpipe"
+UDPIPE_MODEL_PATH = "data/udpipe_models/russian-syntagrus-ud-2.3-181115.udpipe"
 
 
 def text_from_sts(filepath):
