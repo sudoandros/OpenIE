@@ -20,10 +20,11 @@ class SentenceRelations:
                 self._extract_verb_relations(word)
 
     def _extract_verb_relations(self, verb):
-        subj_list = self._extract_subjects(verb)
-        obj_list = self._extract_objects(verb)
+        subj_list = self._get_subjects(verb)
+        obj_list = self._get_objects(verb)
+        obl_list = self._get_oblique_nominals(verb)
 
-    def _extract_subjects(self, word):
+    def _get_subjects(self, word):
         subj_list = []
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
@@ -32,13 +33,23 @@ class SentenceRelations:
                 subj_list += self._get_conjuncts(child)
         return subj_list
 
-    def _extract_objects(self, word):
+    def _get_objects(self, word):
         obj_list = []
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
             if child.deprel in ["obj", "iobj"]:
                 obj_list.append(child_idx)
+                obj_list += self._get_conjuncts(child)
         return obj_list
+
+    def _get_oblique_nominals(self, word):
+        obl_list = []
+        for child_idx in word.children:
+            child = self.sentence.words[child_idx]
+            if child.deprel in ["obl", "obl:agent"]:
+                obl_list.append(child_idx)
+                obl_list += self._get_conjuncts(child)
+        return obl_list
 
     def _get_conjuncts(self, word):
         conjuncts = []
@@ -167,7 +178,7 @@ def get_relations(sentence):
 def simple_test(model):
     relations = []
     sentences = model.tokenize(
-        "Андрей пошел в магазин, купил в магазине куртку и телефон. "
+        "Андрей пошел в магазин и аптеку, купил куртку и телефон."
         "Никита бегал в парке, а Андрей, Дима и Федор прыгали и скакали на батуте."
     )
     for s in sentences:
