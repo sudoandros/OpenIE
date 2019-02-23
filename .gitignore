@@ -1,5 +1,7 @@
 # Processed texts and ML models
 data/
+# Result of parsing
+*.conllu
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
