@@ -15,21 +15,37 @@ class SentenceRelations:
         self._extract_relations()
 
     def _extract_relations(self):
-        for word in self.sentence.words:
-            if word.upostag == "VERB":
-                self._extract_verb_relations(word)
+        self._extract_verb_relations()
 
-    def _extract_verb_relations(self, verb):
-        subj_list = self._get_subjects(verb)
-        obj_list = self._get_objects(verb)
-        obl_list = self._get_oblique_nominals(verb)
+    def _extract_verb_relations(self):
+        verbs = [word for word in self.sentence.words if word.upostag == "VERB"]
+        all_subjects = [self._get_subjects(verb) for verb in verbs]
+        all_objects = [self._get_objects(verb) for verb in verbs]
+        all_oblique_nominals = [self._get_oblique_nominals(verb) for verb in verbs]
+        for i, verb in enumerate(verbs):
+            print(verb.form)
+            verb_subjects = all_subjects[i]
+            verb_objects = all_objects[i]
+            verb_oblique_nominals = all_oblique_nominals[i]
+            if not verb_subjects:
+                try:
+                    verb_subjects = all_subjects[i - 1]
+                    all_subjects[i] = verb_subjects
+                except IndexError:
+                    pass
+            for subj in verb_subjects:
+                for obj in verb_objects:
+                    self.relations.append((subj, verb, obj))
+            for subj in verb_subjects:
+                for obl in verb_oblique_nominals:
+                    self.relations.append((subj, verb, obl))
 
     def _get_subjects(self, word):
         subj_list = []
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
             if child.deprel in ["nsubj", "nsubj:pass"]:
-                subj_list.append(child_idx)
+                subj_list.append(child)
                 subj_list += self._get_conjuncts(child)
         return subj_list
 
@@ -38,7 +54,7 @@ class SentenceRelations:
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
             if child.deprel in ["obj", "iobj"]:
-                obj_list.append(child_idx)
+                obj_list.append(child)
                 obj_list += self._get_conjuncts(child)
         return obj_list
 
@@ -47,7 +63,7 @@ class SentenceRelations:
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
             if child.deprel in ["obl", "obl:agent"]:
-                obl_list.append(child_idx)
+                obl_list.append(child)
                 obl_list += self._get_conjuncts(child)
         return obl_list
 
@@ -56,7 +72,7 @@ class SentenceRelations:
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
             if child.deprel == "conj":
-                conjuncts.append(child_idx)
+                conjuncts.append(child)
         return conjuncts
 
 
@@ -178,8 +194,7 @@ def get_relations(sentence):
 def simple_test(model):
     relations = []
     sentences = model.tokenize(
-        "Андрей пошел в магазин и аптеку, купил куртку и телефон."
-        "Никита бегал в парке, а Андрей, Дима и Федор прыгали и скакали на батуте."
+        "Андрей пошел в магазин и аптеку, купил куртку и телефон, на улице становилось темно. Никита бегал в парке, а Андрей, Дима и Федор варили и жарили обед. Андрей, пока собирался на работу, съел завтрак."
     )
     for s in sentences:
         model.tag(s)
