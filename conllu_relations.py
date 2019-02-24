@@ -125,14 +125,13 @@ def simple_test(model):
         model.parse(s)
         relations = SentenceRelations(s)
     conllu = model.write(sentences, "conllu")
-    with open("output.conllu", "w", encoding="utf8") as f:
-        f.write(conllu)
+    with open("output.conllu", "w", encoding="utf8") as file:
+        file.write(conllu)
 
 
 # TODO частицы
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("syntax_parser", choices=["syntaxnet", "udpipe"])
     parser.add_argument(
         "directory", help="Path to directory containing parsed text in conllu format"
     )
@@ -142,22 +141,16 @@ if __name__ == "__main__":
 
     simple_test(model)
 
-    # for path in tqdm(dir_path.iterdir()):
-    #     relations = {}
-    #     text = None
-    #     if not (
-    #         (args.syntax_parser == "syntaxnet" and "_syntaxnet.conllu" in path.name)
-    #         or (args.syntax_parser == "udpipe" and "_udpiped.conllu" in path.name)
-    #     ):
-    #         continue
+    for path in tqdm(dir_path.iterdir()):
+        output = {}
+        if not (path.suffix == ".conllu"):
+            continue
+        with path.open("r", encoding="utf8") as file:
+            text = file.read()
+        sentences = model.read(text, "conllu")
+        for s in sentences:
+            output[s.getText()] = SentenceRelations(s).relations_as_strings_tuples()
 
-    #     with path.open("r", encoding="utf8") as f:
-    #         text = f.read()
-
-    #     sentences = model.read(text, "conllu")
-    #     for s in sentences:
-    #         relations[s.getText()] = get_relations(s)
-
-    #     towrite = dir_path / (path.stem + "_relations.json")
-    #     with towrite.open("w", encoding="utf8") as f:
-    #         json.dump(relations, f, ensure_ascii=False, indent=4)
+        output_path = dir_path / (path.stem + "_relations.json")
+        with output_path.open("w", encoding="utf8") as file:
+            json.dump(output, file, ensure_ascii=False, indent=4)
