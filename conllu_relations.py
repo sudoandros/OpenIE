@@ -8,28 +8,28 @@ from udpipe_model import UDPipeModel
 UDPIPE_MODEL_PATH = "data/udpipe_models/russian-syntagrus-ud-2.3-181115.udpipe"
 
 
-class SentenceRelations:
+class SentenceReltuples:
     def __init__(self, sentence):
-        self.relations = []
+        self.reltuples = []
         self.sentence = sentence
-        self._extract_relations()
+        self._extract_reltuples()
 
-    def relations_as_strings_tuples(self):
+    def reltuples_as_string_tuples(self):
         res = []
-        for relation in self.relations:
-            res.append(self.relation_to_strings_tuple(relation))
+        for reltuple in self.reltuples:
+            res.append(self.reltuple_to_string_tuple(reltuple))
         return res
 
-    def relation_to_strings_tuple(self, relation):
-        left = self._word_to_string(relation[0])
-        center = self._word_to_string(relation[1])
-        right = self._word_to_string(relation[2])
+    def reltuple_to_string_tuple(self, reltuple):
+        left = self._entity_to_string(reltuple[0])
+        center = self._relation_to_string(reltuple[1])
+        right = self._entity_to_string(reltuple[2])
         return (left, center, right)
 
-    def _extract_relations(self):
-        self._extract_verb_relations()
+    def _extract_reltuples(self):
+        self._extract_verb_reltuples()
 
-    def _extract_verb_relations(self):
+    def _extract_verb_reltuples(self):
         verbs = [word for word in self.sentence.words if word.upostag == "VERB"]
         all_subjects = [self._get_subjects(verb) for verb in verbs]
         all_objects = [self._get_objects(verb) for verb in verbs]
@@ -46,14 +46,27 @@ class SentenceRelations:
                     pass
             for subj in verb_subjects:
                 for obj in verb_objects:
-                    self.relations.append((subj, verb, obj))
+                    self.reltuples.append((subj, verb, obj))
             for subj in verb_subjects:
                 for obl in verb_oblique_nominals:
-                    self.relations.append((subj, verb, obl))
+                    self.reltuples.append((subj, verb, obl))
 
-    def _word_to_string(self, word):
+    def _relation_to_string(self, word):
         prefix = self._get_string_prefix(word)
         return prefix + word.form
+
+    def _entity_to_string(self, word):
+        strings = []
+        if not list(word.children):
+            return word.form
+        for child_idx in (idx for idx in word.children if idx < word.id):
+            child = self.sentence.words[child_idx]
+            strings.append(self._entity_to_string(child))
+        strings.append(word.form)
+        for child_idx in (idx for idx in word.children if idx > word.id):
+            child = self.sentence.words[child_idx]
+            strings.append(self._entity_to_string(child))
+        return " ".join(strings)
 
     def _get_string_prefix(self, word):
         res = ""
@@ -116,14 +129,13 @@ class SentenceRelations:
 
 
 def simple_test(model):
-    relations = []
     sentences = model.tokenize(
         "Андрей пошел в магазин и аптеку, купил куртку и телефон, на улице становилось темно. Никита определенно не будет бегать в парке, а Андрей, Дима и Федор варили и жарили обед. Андрей, пока собирался на работу, съел завтрак."
     )
     for s in sentences:
         model.tag(s)
         model.parse(s)
-        relations = SentenceRelations(s)
+        reltuples = SentenceReltuples(s)
     conllu = model.write(sentences, "conllu")
     with open("output.conllu", "w", encoding="utf8") as file:
         file.write(conllu)
@@ -149,8 +161,8 @@ if __name__ == "__main__":
             text = file.read()
         sentences = model.read(text, "conllu")
         for s in sentences:
-            output[s.getText()] = SentenceRelations(s).relations_as_strings_tuples()
+            output[s.getText()] = SentenceReltuples(s).reltuples_as_string_tuples()
 
-        output_path = dir_path / (path.stem + "_relations.json")
+        output_path = dir_path / (path.stem + "_reltuples.json")
         with output_path.open("w", encoding="utf8") as file:
             json.dump(output, file, ensure_ascii=False, indent=4)
