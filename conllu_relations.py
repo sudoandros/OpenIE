@@ -46,7 +46,16 @@ class SentenceReltuples:
                     self.reltuples.append((subj, verb, obl))
 
     def _relation_to_string(self, word):
-        prefix = self._get_string_prefix(word)
+        prefix = ""
+        for child_idx in word.children:
+            child = self.sentence.words[child_idx]
+            if (
+                child.deprel == "case"
+                or child.deprel == "aux"
+                or child.deprel == "aux:pass"
+                or child.upostag == "PART"
+            ):
+                prefix += child.form + " "
         return prefix + word.form
 
     def _entity_to_string(self, word):
@@ -61,18 +70,6 @@ class SentenceReltuples:
             child = self.sentence.words[child_idx]
             strings.append(self._entity_to_string(child))
         return " ".join(strings)
-
-    def _get_string_prefix(self, word):
-        res = ""
-        for child_idx in word.children:
-            child = self.sentence.words[child_idx]
-            if child.deprel == "case":
-                res += child.form + " "
-            elif child.deprel == "aux":
-                res += child.form + " "
-            elif child.upostag == "PART":
-                res += child.form + " "
-        return res
 
     def _get_subjects(self, word):
         subj_list = []
