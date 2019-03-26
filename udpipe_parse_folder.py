@@ -39,7 +39,7 @@ def parse(dir_path, udpipe_model):
             udpipe_model.parse(s)
 
         conllu = udpipe_model.write(sentences, "conllu")
-        towrite = dir_path / (sts_path.stem + "_udpiped.conllu")
+        towrite = dir_path / (sts_path.stem + "_udpipe.conllu")
         with towrite.open("w", encoding="utf8") as f:
             f.write(conllu)
 

@@ -38,12 +38,6 @@ class SentenceReltuples:
             verb_subjects = all_subjects[i]
             verb_objects = all_objects[i]
             verb_oblique_nominals = all_oblique_nominals[i]
-            if not verb_subjects:
-                try:
-                    verb_subjects = all_subjects[i - 1]
-                    all_subjects[i] = verb_subjects
-                except IndexError:
-                    pass
             for subj in verb_subjects:
                 for obj in verb_objects:
                     self.reltuples.append((subj, verb, obj))
@@ -141,19 +135,21 @@ def simple_test(model):
         file.write(conllu)
 
 
-# TODO частицы
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "directory", help="Path to directory containing parsed text in conllu format"
+        "conllu_dir",
+        help="Path to the directory containing parsed text in conllu format",
     )
+    parser.add_argument("save_dir", help="Path to the directory to save relations to")
     args = parser.parse_args()
-    dir_path = Path(args.directory)
+    conllu_dir = Path(args.conllu_dir)
+    save_dir = Path(args.save_dir)
     model = UDPipeModel(UDPIPE_MODEL_PATH)
 
     simple_test(model)
 
-    for path in tqdm(dir_path.iterdir()):
+    for path in tqdm(conllu_dir.iterdir()):
         output = {}
         if not (path.suffix == ".conllu"):
             continue
@@ -163,6 +159,6 @@ if __name__ == "__main__":
         for s in sentences:
             output[s.getText()] = SentenceReltuples(s).reltuples_as_string_tuples()
 
-        output_path = dir_path / (path.stem + "_reltuples.json")
+        output_path = save_dir / (path.stem + "_reltuples.json")
         with output_path.open("w", encoding="utf8") as file:
             json.dump(output, file, ensure_ascii=False, indent=4)
