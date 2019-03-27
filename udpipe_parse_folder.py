@@ -27,8 +27,9 @@ def text_from_hdr(filepath):
                 res = line.split("=", 1)[1]
     return res
 
-def parse(dir_path, udpipe_model):
-    for sts_path in tqdm(dir_path.iterdir()):
+
+def parse(texts_dir, conllu_dir, udpipe_model):
+    for sts_path in tqdm(texts_dir.iterdir()):
         if sts_path.suffix != ".sts":
             continue
         text = text_from_sts(sts_path)
@@ -39,8 +40,8 @@ def parse(dir_path, udpipe_model):
             udpipe_model.parse(s)
 
         conllu = udpipe_model.write(sentences, "conllu")
-        towrite = dir_path / (sts_path.stem + "_udpipe.conllu")
-        with towrite.open("w", encoding="utf8") as f:
+        conllu_path = conllu_dir / (sts_path.stem + "_udpipe.conllu")
+        with conllu_path.open("w", encoding="utf8") as f:
             f.write(conllu)
 
 
@@ -49,10 +50,14 @@ if __name__ == "__main__":
         description="Parse every .sts file in specified directory using UDPipe"
         " and save results in the same directory"
     )
-    parser.add_argument("directory")
+    parser.add_argument("texts_dir", help="Directory with sts text files")
+    parser.add_argument(
+        "conllu_dir", help="Directory where results of parsing should be saved to"
+    )
     args = parser.parse_args()
 
-    dir_path = Path(args.directory)
+    texts_dir = Path(args.texts_dir)
+    conllu_dir = Path(args.conllu_dir)
     udpipe_model = UDPipeModel(UDPIPE_MODEL_PATH)
 
-    parse(dir_path, udpipe_model)
+    parse(texts_dir, conllu_dir, udpipe_model)

@@ -144,8 +144,9 @@ def get_space_after(token, sentence):
         return 'SpaceAfter=No'
 
 if __name__ == '__main__':
-    dir_path = Path(sys.argv[1])
-    for file_path in tqdm(dir_path.iterdir()):
+    texts_dir = Path(sys.argv[1])
+    conllu_dir = Path(sys.argv[2])
+    for file_path in tqdm(texts_dir.iterdir()):
         if file_path.suffix != '.sts':
             continue
         input_file = file_path.open('r', encoding='cp1251')
@@ -179,7 +180,7 @@ if __name__ == '__main__':
             #     outputFile.write(pat.sub('', tr_ln).encode('utf8'))
             #     outputFile.write('\n')
 
-        output_file_path = (dir_path / (file_path.stem + '_syntaxnet.conllu'))
+        output_file_path = (conllu_dir / (file_path.stem + '_syntaxnet.conllu'))
         with output_file_path.open('w', encoding='utf8') as f:
             f.write(conllu)
         input_file.close()
