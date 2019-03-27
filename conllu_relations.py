@@ -21,9 +21,9 @@ class SentenceReltuples:
         return res
 
     def reltuple_to_string_tuple(self, reltuple):
-        left = self._entity_to_string(reltuple[0])
+        left = self._subtree_to_string(reltuple[0])
         center = self._relation_to_string(reltuple[1])
-        right = self._entity_to_string(reltuple[2])
+        right = self._subtree_to_string(reltuple[2])
         return (left, center, right)
 
     def _extract_reltuples(self):
@@ -56,19 +56,21 @@ class SentenceReltuples:
                 or child.upostag == "PART"
             ):
                 prefix += child.form + " "
+            elif child.deprel == "advmod":
+                prefix += self._subtree_to_string(child) + " "
         return prefix + word.form
 
-    def _entity_to_string(self, word):
+    def _subtree_to_string(self, word):
         strings = []
         if not list(word.children):
             return word.form
         for child_idx in (idx for idx in word.children if idx < word.id):
             child = self.sentence.words[child_idx]
-            strings.append(self._entity_to_string(child))
+            strings.append(self._subtree_to_string(child))
         strings.append(word.form)
         for child_idx in (idx for idx in word.children if idx > word.id):
             child = self.sentence.words[child_idx]
-            strings.append(self._entity_to_string(child))
+            strings.append(self._subtree_to_string(child))
         return " ".join(strings)
 
     def _get_subjects(self, word):
@@ -77,7 +79,9 @@ class SentenceReltuples:
             child = self.sentence.words[child_idx]
             if self._is_subject(child):
                 subj_list.append(child)
-                subj_list += self._get_conjuncts(child)
+        if not subj_list and word.deprel == "conj":
+            parent = self.sentence.words[word.head]
+            subj_list = self._get_subjects(parent)
         return subj_list
 
     def _get_objects(self, word):
@@ -86,7 +90,6 @@ class SentenceReltuples:
             child = self.sentence.words[child_idx]
             if self._is_object(child):
                 obj_list.append(child)
-                obj_list += self._get_conjuncts(child)
         return obj_list
 
     def _get_oblique_nominals(self, word):
@@ -95,16 +98,7 @@ class SentenceReltuples:
             child = self.sentence.words[child_idx]
             if self._is_oblique_nominal(child):
                 obl_list.append(child)
-                obl_list += self._get_conjuncts(child)
         return obl_list
-
-    def _get_conjuncts(self, word):
-        conjuncts = []
-        for child_idx in word.children:
-            child = self.sentence.words[child_idx]
-            if self._is_conjunct(child):
-                conjuncts.append(child)
-        return conjuncts
 
     def _is_subject(self, word):
         return word.deprel in ["nsubj", "nsubj:pass"]
