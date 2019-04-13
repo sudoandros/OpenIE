@@ -107,7 +107,7 @@ class SentenceReltuples:
         return word.deprel in ["obj", "iobj"]
 
     def _is_oblique_nominal(self, word):
-        return word.deprel in ["obl", "obl:agent"]
+        return word.deprel in ["obl", "obl:agent", "iobl"]
 
     def _is_conjunct(self, word):
         return word.deprel == "conj"
