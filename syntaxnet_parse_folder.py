@@ -50,8 +50,8 @@ def load_model(base_dir, master_spec_name, checkpoint_name):
                             feed_dict={annotator['input_batch']: [sentence]})
     return annotate_sentence
 
-segmenter_model = load_model("syntaxnet_russian/segmenter", "spec.textproto", "checkpoint")
-parser_model = load_model("syntaxnet_russian", "parser_spec.textproto", "checkpoint")
+segmenter_model = load_model("data/Russian-SynTagRus/segmenter", "spec.textproto", "checkpoint")
+parser_model = load_model("data/Russian-SynTagRus", "parser_spec.textproto", "checkpoint")
 
 def annotate_text(text):
     sentence = sentence_pb2.Sentence(
@@ -163,7 +163,7 @@ if __name__ == '__main__':
                 conllu += '_' + '\t'
                 attributes = parse_attributes(token.tag)
                 conllu += get_upos_tag(token.tag) + '\t'
-                conllu += get_xpos_tag(token.tag) + '\t'
+                conllu += get_xpos_tag(token.tag) or "_" + '\t'
                 conllu += get_feats(token.tag) + '\t'
                 conllu += str(token.head + 1) + '\t'
                 conllu += token.label + '\t'
