@@ -47,6 +47,7 @@ class SentenceReltuples:
 
     def _relation_to_string(self, word):
         prefix = ""
+        postfix = ""
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
             if (
@@ -55,10 +56,14 @@ class SentenceReltuples:
                 or child.deprel == "aux:pass"
                 or child.upostag == "PART"
             ):
-                prefix += child.form + " "
-            elif child.deprel == "advmod":
-                prefix += self._subtree_to_string(child) + " "
-        return prefix + word.form
+                if child.id < word.id:
+                    prefix += child.form + " "
+                if child.id > word.id:
+                    postfix +=  " " + child.form
+        if word.deprel == "xcomp":
+            parent = self.sentence.words[word.head]
+            prefix = self._relation_to_string(parent) + " " + prefix
+        return prefix + word.form + postfix
 
     def _subtree_to_string(self, word):
         strings = []
@@ -79,7 +84,7 @@ class SentenceReltuples:
             child = self.sentence.words[child_idx]
             if self._is_subject(child):
                 subj_list.append(child)
-        if not subj_list and word.deprel == "conj":
+        if not subj_list and (word.deprel == "conj" or word.deprel == "xcomp"):
             parent = self.sentence.words[word.head]
             subj_list = self._get_subjects(parent)
         return subj_list
@@ -115,12 +120,15 @@ class SentenceReltuples:
 
 def simple_test(model):
     sentences = model.tokenize(
-        "Андрей пошел в магазин и аптеку, купил куртку и телефон, на улице становилось темно. Никита определенно не будет бегать в парке, а Андрей, Дима и Федор варили и жарили обед. Андрей, пока собирался на работу, съел завтрак."
+        "Андрей пошел в магазин и аптеку, купил куртку и телефон, на улице становилось темно. "
+        "Никита определенно не будет бегать в парке, а Андрей, Дима и Федор варили и жарили обед. "
+        "Андрей, пока собирался на работу, съел завтрак."
     )
     for s in sentences:
         model.tag(s)
         model.parse(s)
-        reltuples = SentenceReltuples(s)
+        reltuples = SentenceReltuples(s).reltuples_as_string_tuples()
+        print(reltuples)
     conllu = model.write(sentences, "conllu")
     with open("output.conllu", "w", encoding="utf8") as file:
         file.write(conllu)
@@ -137,8 +145,6 @@ if __name__ == "__main__":
     conllu_dir = Path(args.conllu_dir)
     save_dir = Path(args.save_dir)
     model = UDPipeModel(UDPIPE_MODEL_PATH)
-
-    simple_test(model)
 
     for path in tqdm(conllu_dir.iterdir()):
         output = {}
