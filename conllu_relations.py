@@ -31,13 +31,10 @@ class SentenceReltuples:
 
     def _extract_verb_reltuples(self):
         verbs = [word for word in self.sentence.words if word.upostag == "VERB"]
-        all_subjects = [self._get_subjects(verb) for verb in verbs]
-        all_objects = [self._get_objects(verb) for verb in verbs]
-        all_oblique_nominals = [self._get_oblique_nominals(verb) for verb in verbs]
-        for i, verb in enumerate(verbs):
-            verb_subjects = all_subjects[i]
-            verb_objects = all_objects[i]
-            verb_oblique_nominals = all_oblique_nominals[i]
+        for verb in verbs:
+            verb_subjects = self._get_subjects(verb)
+            verb_objects = self._get_objects(verb)
+            verb_oblique_nominals = self._get_oblique_nominals(verb)
             for subj in verb_subjects:
                 for obj in verb_objects:
                     self.reltuples.append((subj, verb, obj))
@@ -46,7 +43,27 @@ class SentenceReltuples:
                     self.reltuples.append((subj, verb, obl))
 
     def _relation_to_string(self, word):
+        prefix = self._get_relation_prefix(word)
+        postfix = self._get_relation_postfix(word)
+        return prefix + word.form + postfix
+
+    def _get_relation_prefix(self, word):
         prefix = ""
+        for child_idx in word.children:
+            child = self.sentence.words[child_idx]
+            if (
+                child.deprel == "case"
+                or child.deprel == "aux"
+                or child.deprel == "aux:pass"
+                or child.upostag == "PART"
+            ) and child.id < word.id:
+                prefix += child.form + " "
+        if word.deprel == "xcomp":
+            parent = self.sentence.words[word.head]
+            prefix = self._relation_to_string(parent) + " " + prefix
+        return prefix
+
+    def _get_relation_postfix(self, word):
         postfix = ""
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
@@ -55,15 +72,9 @@ class SentenceReltuples:
                 or child.deprel == "aux"
                 or child.deprel == "aux:pass"
                 or child.upostag == "PART"
-            ):
-                if child.id < word.id:
-                    prefix += child.form + " "
-                if child.id > word.id:
-                    postfix +=  " " + child.form
-        if word.deprel == "xcomp":
-            parent = self.sentence.words[word.head]
-            prefix = self._relation_to_string(parent) + " " + prefix
-        return prefix + word.form + postfix
+            ) and child.id > word.id:
+                postfix += " " + child.form
+        return postfix
 
     def _subtree_to_string(self, word):
         strings = []
@@ -122,7 +133,8 @@ def simple_test(model):
     sentences = model.tokenize(
         "Андрей пошел в магазин и аптеку, купил куртку и телефон, на улице становилось темно. "
         "Никита определенно не будет бегать в парке, а Андрей, Дима и Федор варили и жарили обед. "
-        "Андрей, пока собирался на работу, съел завтрак."
+        "Андрей, пока собирался на работу, съел завтрак. "
+        "Андрей в пять часов может начать делать домашнюю работу и слушать музыку. "
     )
     for s in sentences:
         model.tag(s)
