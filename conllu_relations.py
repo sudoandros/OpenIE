@@ -27,20 +27,24 @@ class SentenceReltuples:
         return (left, center, right)
 
     def _extract_reltuples(self):
-        self._extract_verb_reltuples()
-
-    def _extract_verb_reltuples(self):
         verbs = [word for word in self.sentence.words if word.upostag == "VERB"]
         for verb in verbs:
-            verb_subjects = self._get_subjects(verb)
-            verb_objects = self._get_objects(verb)
-            verb_oblique_nominals = self._get_oblique_nominals(verb)
-            for subj in verb_subjects:
-                for obj in verb_objects:
-                    self.reltuples.append((subj, verb, obj))
-            for subj in verb_subjects:
-                for obl in verb_oblique_nominals:
-                    self.reltuples.append((subj, verb, obl))
+            self._extract_verb_reltuples(verb)
+
+    def _extract_verb_reltuples(self, verb):
+        for child_idx in verb.children:
+            child = self.sentence.words[child_idx]
+            if child.deprel == "xcomp":
+                return
+        verb_subjects = self._get_subjects(verb)
+        verb_objects = self._get_objects(verb)
+        verb_oblique_nominals = self._get_oblique_nominals(verb)
+        for subj in verb_subjects:
+            for obj in verb_objects:
+                self.reltuples.append((subj, verb, obj))
+        for subj in verb_subjects:
+            for obl in verb_oblique_nominals:
+                self.reltuples.append((subj, verb, obl))
 
     def _relation_to_string(self, word):
         prefix = self._get_relation_prefix(word)
@@ -58,9 +62,12 @@ class SentenceReltuples:
                 or child.upostag == "PART"
             ) and child.id < word.id:
                 prefix += child.form + " "
+        parent = self.sentence.words[word.head]
         if word.deprel == "xcomp":
-            parent = self.sentence.words[word.head]
             prefix = self._relation_to_string(parent) + " " + prefix
+        if self._is_conjunct(word) and parent.deprel == "xcomp":
+            grandparent = self.sentence.words[parent.head]
+            prefix = self._relation_to_string(grandparent) + " " + prefix
         return prefix
 
     def _get_relation_postfix(self, word):
@@ -106,6 +113,12 @@ class SentenceReltuples:
             child = self.sentence.words[child_idx]
             if self._is_object(child):
                 obj_list.append(child)
+        parent = self.sentence.words[word.head]
+        if word.deprel == "xcomp":
+            obj_list += self._get_objects(parent)
+        if self._is_conjunct(word) and parent.deprel == "xcomp":
+            grandparent = self.sentence.words[parent.head]
+            obj_list += self._get_objects(grandparent)
         return obj_list
 
     def _get_oblique_nominals(self, word):
@@ -114,6 +127,12 @@ class SentenceReltuples:
             child = self.sentence.words[child_idx]
             if self._is_oblique_nominal(child):
                 obl_list.append(child)
+        parent = self.sentence.words[word.head]
+        if word.deprel == "xcomp":
+            obl_list += self._get_oblique_nominals(parent)
+        if self._is_conjunct(word) and parent.deprel == "xcomp":
+            grandparent = self.sentence.words[parent.head]
+            obl_list += self._get_oblique_nominals(grandparent)
         return obl_list
 
     def _is_subject(self, word):
@@ -134,13 +153,14 @@ def simple_test(model):
         "Андрей пошел в магазин и аптеку, купил куртку и телефон, на улице становилось темно. "
         "Никита определенно не будет бегать в парке, а Андрей, Дима и Федор варили и жарили обед. "
         "Андрей, пока собирался на работу, съел завтрак. "
-        "Андрей в пять часов может начать делать домашнюю работу и слушать музыку. "
+        "С помощью уязвимости злоумышленник может авторизоваться в уязвимой системе и начать выполнять произвольные команды суперпользователя и творить фигню."
     )
     for s in sentences:
         model.tag(s)
         model.parse(s)
         reltuples = SentenceReltuples(s).reltuples_as_string_tuples()
-        print(reltuples)
+        print(s.getText())
+        print("\n".join(str(reltuple) for reltuple in reltuples))
     conllu = model.write(sentences, "conllu")
     with open("output.conllu", "w", encoding="utf8") as file:
         file.write(conllu)
