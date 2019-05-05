@@ -1,8 +1,12 @@
-import sys
-import json
-from tqdm import tqdm
-from pathlib import Path
 import argparse
+import json
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import networkx as nx
+from tqdm import tqdm
+
 from udpipe_model import UDPipeModel
 
 UDPIPE_MODEL_PATH = "data/udpipe_models/russian-syntagrus-ud-2.3-181115.udpipe"
@@ -14,7 +18,7 @@ class SentenceReltuples:
         self.sentence = sentence
         self._extract_reltuples()
 
-    def reltuples_as_string_tuples(self):
+    def as_string_tuples(self):
         res = []
         for reltuple in self.reltuples:
             res.append(self.reltuple_to_string_tuple(reltuple))
@@ -25,6 +29,60 @@ class SentenceReltuples:
         center = self._relation_to_string(reltuple[1])
         right = self._subtree_to_string(reltuple[2])
         return (left, center, right)
+
+    @property
+    def graph(self):
+        graph = nx.DiGraph()
+        for reltuple in self.reltuples:
+            graph.add_edge(reltuple[0].form, reltuple[1].form, dependency="relation")
+            graph.add_edge(reltuple[1].form, reltuple[2].form, dependency="relation")
+            graph_left = self._subtree_to_graph(reltuple[0])
+            graph_center = self._relation_to_graph(reltuple[1])
+            graph_right = self._subtree_to_graph(reltuple[2])
+            for edge in graph_left.edges:
+                graph.add_edge(edge[0], edge[1], **graph_left.get_edge_data(*edge))
+            for edge in graph_center.edges:
+                graph.add_edge(edge[0], edge[1], **graph_center.get_edge_data(*edge))
+            for edge in graph_right.edges:
+                graph.add_edge(edge[0], edge[1], **graph_right.get_edge_data(*edge))
+        return graph
+
+    def _subtree_to_graph(self, word):
+        graph = nx.DiGraph()
+        for child_idx in word.children:
+            child = self.sentence.words[child_idx]
+            graph.add_edge(word.form, child.form, dependency="syntax")
+            child_graph = self._subtree_to_graph(child)
+            for edge in child_graph.edges:
+                graph.add_edge(edge[0], edge[1], **child_graph.get_edge_data(*edge))
+        return graph
+
+    def _relation_to_graph(self, word):
+        graph = nx.DiGraph()
+        for child_idx in word.children:
+            child = self.sentence.words[child_idx]
+            if (
+                child.deprel == "case"
+                or child.deprel == "aux"
+                or child.deprel == "aux:pass"
+                or child.upostag == "PART"
+            ):
+                graph.add_edge(word.form, child.form, dependency="syntax")
+        parent = self.sentence.words[word.head]
+        if word.deprel == "xcomp":
+            graph.add_edge(parent.form, word.form, dependency="syntax")
+            graph_parent = self._relation_to_graph(parent)
+            for edge in graph_parent.edges:
+                graph.add_edge(edge[0], edge[1], **graph_parent.get_edge_data(*edge))
+        if self._is_conjunct(word) and parent.deprel == "xcomp":
+            grandparent = self.sentence.words[parent.head]
+            graph.add_edge(grandparent.form, word.form, dependency="syntax")
+            graph_grandparent = self._relation_to_graph(grandparent)
+            for edge in graph_grandparent.edges:
+                graph.add_edge(
+                    edge[0], edge[1], **graph_grandparent.get_edge_data(*edge)
+                )
+        return graph
 
     def _extract_reltuples(self):
         verbs = [word for word in self.sentence.words if word.upostag == "VERB"]
@@ -153,17 +211,22 @@ def simple_test(model):
         "Андрей пошел в магазин и аптеку, купил куртку и телефон, на улице становилось темно. "
         "Никита определенно не будет бегать в парке, а Андрей, Дима и Федор варили и жарили обед. "
         "Андрей, пока собирался на работу, съел завтрак. "
-        "С помощью уязвимости злоумышленник может авторизоваться в уязвимой системе и начать выполнять произвольные команды суперпользователя и творить фигню."
+        "С помощью уязвимости злоумышленник может авторизоваться в уязвимой системе и начать выполнять произвольные команды суперпользователя и творить фигню. "
     )
+    graph = nx.DiGraph()
     for s in sentences:
         model.tag(s)
         model.parse(s)
-        reltuples = SentenceReltuples(s).reltuples_as_string_tuples()
+        reltuples = SentenceReltuples(s)
         print(s.getText())
-        print("\n".join(str(reltuple) for reltuple in reltuples))
+        print("\n".join(str(reltuple) for reltuple in reltuples.as_string_tuples()))
+        graph_sentence = reltuples.graph
+        for edge in graph_sentence.edges:
+            graph.add_edge(edge[0], edge[1], **graph_sentence.get_edge_data(*edge))
     conllu = model.write(sentences, "conllu")
-    with open("output.conllu", "w", encoding="utf8") as file:
+    with open("data/test_output/output.conllu", "w", encoding="utf8") as file:
         file.write(conllu)
+    nx.write_gexf(graph, "data/test_output/graph.gexf")
 
 
 if __name__ == "__main__":
@@ -177,6 +240,7 @@ if __name__ == "__main__":
     conllu_dir = Path(args.conllu_dir)
     save_dir = Path(args.save_dir)
     model = UDPipeModel(UDPIPE_MODEL_PATH)
+    graph = nx.DiGraph()
 
     for path in tqdm(conllu_dir.iterdir()):
         output = {}
@@ -186,8 +250,14 @@ if __name__ == "__main__":
             text = file.read()
         sentences = model.read(text, "conllu")
         for s in sentences:
-            output[s.getText()] = SentenceReltuples(s).reltuples_as_string_tuples()
+            reltuples = SentenceReltuples(s)
+            output[s.getText()] = reltuples.as_string_tuples()
+            graph_sentence = reltuples.graph
+            for edge in graph_sentence.edges:
+                graph.add_edge(edge[0], edge[1], **graph_sentence.get_edge_data(*edge))
 
         output_path = save_dir / (path.stem + "_reltuples.json")
         with output_path.open("w", encoding="utf8") as file:
             json.dump(output, file, ensure_ascii=False, indent=4)
+
+    nx.write_gexf(graph, save_dir / "graph.gexf", version="1.1draft")
