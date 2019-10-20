@@ -7,8 +7,6 @@ from tqdm import tqdm
 
 from udpipe_model import UDPipeModel
 
-UDPIPE_MODEL_PATH = "data/udpipe_models/russian-syntagrus-ud-2.3-181115.udpipe"
-
 
 def text_from_sts(filepath):
     res = []
@@ -50,6 +48,7 @@ if __name__ == "__main__":
         description="Parse every .sts file in specified directory using UDPipe"
         " and save results in the same directory"
     )
+    parser.add_argument("model_path", help="Path to the UDPipe model")
     parser.add_argument("texts_dir", help="Directory with sts text files")
     parser.add_argument(
         "conllu_dir", help="Directory where results of parsing should be saved to"
@@ -58,6 +57,6 @@ if __name__ == "__main__":
 
     texts_dir = Path(args.texts_dir)
     conllu_dir = Path(args.conllu_dir)
-    udpipe_model = UDPipeModel(UDPIPE_MODEL_PATH)
+    udpipe_model = UDPipeModel(args.model_path)
 
     parse(texts_dir, conllu_dir, udpipe_model)
