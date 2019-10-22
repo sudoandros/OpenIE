@@ -9,8 +9,6 @@ from tqdm import tqdm
 
 from udpipe_model import UDPipeModel
 
-UDPIPE_MODEL_PATH = "data/udpipe_models/russian-syntagrus-ud-2.3-181115.udpipe"
-
 
 class SentenceReltuples:
     def __init__(self, sentence):
@@ -231,6 +229,7 @@ def simple_test(model):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("model_path", help="Path to the UDPipe model")
     parser.add_argument(
         "conllu_dir",
         help="Path to the directory containing parsed text in conllu format",
@@ -239,7 +238,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     conllu_dir = Path(args.conllu_dir)
     save_dir = Path(args.save_dir)
-    model = UDPipeModel(UDPIPE_MODEL_PATH)
+    model = UDPipeModel(args.model_path)
     graph = nx.DiGraph()
 
     for path in tqdm(conllu_dir.iterdir()):
