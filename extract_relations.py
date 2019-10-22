@@ -32,27 +32,39 @@ class SentenceReltuples:
     def graph(self):
         graph = nx.DiGraph()
         for reltuple in self.reltuples:
+            graph.add_node(reltuple[0].form, weight=1)
+            graph.add_node(reltuple[1].form, weight=1)
             graph.add_edge(reltuple[0].form, reltuple[1].form, dependency="relation")
             graph.add_edge(reltuple[1].form, reltuple[2].form, dependency="relation")
             graph_left = self._subtree_to_graph(reltuple[0])
             graph_center = self._relation_to_graph(reltuple[1])
             graph_right = self._subtree_to_graph(reltuple[2])
-            for edge in graph_left.edges:
-                graph.add_edge(edge[0], edge[1], **graph_left.get_edge_data(*edge))
-            for edge in graph_center.edges:
-                graph.add_edge(edge[0], edge[1], **graph_center.get_edge_data(*edge))
-            for edge in graph_right.edges:
-                graph.add_edge(edge[0], edge[1], **graph_right.get_edge_data(*edge))
+            for node, attr in graph_left.nodes.items():
+                graph.add_node(node, **attr)
+            for node, attr in graph_center.nodes.items():
+                graph.add_node(node, **attr)
+            for node, attr in graph_right.nodes.items():
+                graph.add_node(node, **attr)
+            for edge, attr in graph_left.edges.items():
+                graph.add_edge(edge[0], edge[1], **attr)
+            for edge, attr in graph_center.edges.items():
+                graph.add_edge(edge[0], edge[1], **attr)
+            for edge, attr in graph_right.edges.items():
+                graph.add_edge(edge[0], edge[1], **attr)
         return graph
 
     def _subtree_to_graph(self, word):
         graph = nx.DiGraph()
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
+            graph.add_node(word.form, weight=1)
+            graph.add_node(child.form, weight=1)
             graph.add_edge(word.form, child.form, dependency="syntax")
             child_graph = self._subtree_to_graph(child)
-            for edge in child_graph.edges:
-                graph.add_edge(edge[0], edge[1], **child_graph.get_edge_data(*edge))
+            for node, attr in child_graph.nodes.items():
+                graph.add_node(node, **attr)
+            for edge, attr in child_graph.edges.items():
+                graph.add_edge(edge[0], edge[1], **attr)
         return graph
 
     def _relation_to_graph(self, word):
@@ -65,21 +77,29 @@ class SentenceReltuples:
                 or child.deprel == "aux:pass"
                 or child.upostag == "PART"
             ):
+                graph.add_node(word.form, weight=1)
+                graph.add_node(child.form, weight=1)
                 graph.add_edge(word.form, child.form, dependency="syntax")
         parent = self.sentence.words[word.head]
         if word.deprel == "xcomp":
+            graph.add_node(parent.form, weight=1)
+            graph.add_node(word.form, weight=1)
             graph.add_edge(parent.form, word.form, dependency="syntax")
             graph_parent = self._relation_to_graph(parent)
-            for edge in graph_parent.edges:
-                graph.add_edge(edge[0], edge[1], **graph_parent.get_edge_data(*edge))
+            for node, attr in graph_parent.nodes.items():
+                graph.add_node(node, **attr)
+            for edge, attr in graph_parent.edges.items():
+                graph.add_edge(edge[0], edge[1], **attr)
         if self._is_conjunct(word) and parent.deprel == "xcomp":
             grandparent = self.sentence.words[parent.head]
+            graph.add_node(grandparent.form, weight=1)
+            graph.add_node(word.form, weight=1)
             graph.add_edge(grandparent.form, word.form, dependency="syntax")
             graph_grandparent = self._relation_to_graph(grandparent)
-            for edge in graph_grandparent.edges:
-                graph.add_edge(
-                    edge[0], edge[1], **graph_grandparent.get_edge_data(*edge)
-                )
+            for node, attr in graph_grandparent.nodes.items():
+                graph.add_node(node, **attr)
+            for edge, attr in graph_grandparent.edges.items():
+                graph.add_edge(edge[0], edge[1], **attr)
         return graph
 
     def _extract_reltuples(self):
@@ -252,8 +272,10 @@ if __name__ == "__main__":
             reltuples = SentenceReltuples(s)
             output[s.getText()] = reltuples.as_string_tuples()
             graph_sentence = reltuples.graph
-            for edge in graph_sentence.edges:
-                graph.add_edge(edge[0], edge[1], **graph_sentence.get_edge_data(*edge))
+            for node, attr in graph_sentence.nodes.items():
+                graph.add_node(node, **attr)
+            for edge, attr in graph_sentence.edges.items():
+                graph.add_edge(edge[0], edge[1], **attr)
 
         output_path = save_dir / (path.stem + "_reltuples.json")
         with output_path.open("w", encoding="utf8") as file:
