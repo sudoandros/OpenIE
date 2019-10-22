@@ -32,18 +32,22 @@ class SentenceReltuples:
     def graph(self):
         graph = nx.DiGraph()
         for reltuple in self.reltuples:
-            graph.add_node(reltuple[0].form, weight=1)
-            graph.add_node(reltuple[1].form, weight=1)
+            graph.add_node(reltuple[0].form, node_type="arg")
+            graph.add_node(reltuple[1].form, node_type="arg")
+            graph.add_node(reltuple[2].form, node_type="arg")
             graph.add_edge(reltuple[0].form, reltuple[1].form, dependency="relation")
             graph.add_edge(reltuple[1].form, reltuple[2].form, dependency="relation")
             graph_left = self._subtree_to_graph(reltuple[0])
             graph_center = self._relation_to_graph(reltuple[1])
             graph_right = self._subtree_to_graph(reltuple[2])
             for node, attr in graph_left.nodes.items():
+                attr["node_type"] = "arg"
                 graph.add_node(node, **attr)
             for node, attr in graph_center.nodes.items():
+                attr["node_type"] = "rel"
                 graph.add_node(node, **attr)
             for node, attr in graph_right.nodes.items():
+                attr["node_type"] = "arg"
                 graph.add_node(node, **attr)
             for edge, attr in graph_left.edges.items():
                 graph.add_edge(edge[0], edge[1], **attr)
@@ -51,14 +55,16 @@ class SentenceReltuples:
                 graph.add_edge(edge[0], edge[1], **attr)
             for edge, attr in graph_right.edges.items():
                 graph.add_edge(edge[0], edge[1], **attr)
+            for node in graph.nodes:
+                graph.nodes[node]["weight"] = len(graph[node])
         return graph
 
     def _subtree_to_graph(self, word):
         graph = nx.DiGraph()
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
-            graph.add_node(word.form, weight=1)
-            graph.add_node(child.form, weight=1)
+            graph.add_node(word.form)
+            graph.add_node(child.form)
             graph.add_edge(word.form, child.form, dependency="syntax")
             child_graph = self._subtree_to_graph(child)
             for node, attr in child_graph.nodes.items():
@@ -77,13 +83,13 @@ class SentenceReltuples:
                 or child.deprel == "aux:pass"
                 or child.upostag == "PART"
             ):
-                graph.add_node(word.form, weight=1)
-                graph.add_node(child.form, weight=1)
+                graph.add_node(word.form)
+                graph.add_node(child.form)
                 graph.add_edge(word.form, child.form, dependency="syntax")
         parent = self.sentence.words[word.head]
         if word.deprel == "xcomp":
-            graph.add_node(parent.form, weight=1)
-            graph.add_node(word.form, weight=1)
+            graph.add_node(parent.form)
+            graph.add_node(word.form)
             graph.add_edge(parent.form, word.form, dependency="syntax")
             graph_parent = self._relation_to_graph(parent)
             for node, attr in graph_parent.nodes.items():
@@ -92,8 +98,8 @@ class SentenceReltuples:
                 graph.add_edge(edge[0], edge[1], **attr)
         if self._is_conjunct(word) and parent.deprel == "xcomp":
             grandparent = self.sentence.words[parent.head]
-            graph.add_node(grandparent.form, weight=1)
-            graph.add_node(word.form, weight=1)
+            graph.add_node(grandparent.form)
+            graph.add_node(word.form)
             graph.add_edge(grandparent.form, word.form, dependency="syntax")
             graph_grandparent = self._relation_to_graph(grandparent)
             for node, attr in graph_grandparent.nodes.items():
