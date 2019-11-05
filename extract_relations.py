@@ -32,7 +32,20 @@ class SentenceReltuples:
         return (left, center, right)
 
     @property
-    def graph(self):
+    def simple_relation_graph(self):
+        graph = nx.DiGraph()
+        for reltuple in self.string_tuples:
+            graph.add_node(reltuple[0])
+            graph.add_node(reltuple[2])
+            graph.add_edge(
+                reltuple[0], reltuple[2], label=reltuple[1], dependency="relation"
+            )
+            for node in graph.nodes:
+                graph.nodes[node]["weight"] = len(graph[node]) + 1
+        return graph
+
+    @property
+    def syntax_relation_graph(self):
         graph = nx.DiGraph()
         for reltuple in self.reltuples:
             graph.add_node(reltuple[0].form, node_type="arg")
@@ -294,6 +307,7 @@ def simple_test(model):
         reltuples = SentenceReltuples(s)
         print(s.getText())
         print("\n".join(str(reltuple) for reltuple in reltuples.string_tuples))
+        graph_sentence = reltuples.simple_relation_graph
         for edge in graph_sentence.edges:
             graph.add_edge(edge[0], edge[1], **graph_sentence.get_edge_data(*edge))
     conllu = model.write(sentences, "conllu")
@@ -326,6 +340,7 @@ if __name__ == "__main__":
         for s in sentences:
             reltuples = SentenceReltuples(s)
             output[s.getText()] = reltuples.string_tuples
+            graph_sentence = reltuples.simple_relation_graph
             for node, attr in graph_sentence.nodes.items():
                 graph.add_node(node, **attr)
             for edge, attr in graph_sentence.edges.items():
