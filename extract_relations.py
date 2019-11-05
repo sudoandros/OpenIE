@@ -18,13 +18,14 @@ class SentenceReltuples:
         self.sentence = sentence
         self._extract_reltuples()
 
-    def as_string_tuples(self):
+    @property
+    def string_tuples(self):
         res = []
         for reltuple in self.reltuples:
-            res.append(self.reltuple_to_string_tuple(reltuple))
+            res.append(self.to_string_tuple(reltuple))
         return res
 
-    def reltuple_to_string_tuple(self, reltuple):
+    def to_string_tuple(self, reltuple):
         left = self._subtree_to_string(reltuple[0])
         center = self._relation_to_string(reltuple[1])
         right = self._subtree_to_string(reltuple[2])
@@ -292,8 +293,7 @@ def simple_test(model):
         model.parse(s)
         reltuples = SentenceReltuples(s)
         print(s.getText())
-        print("\n".join(str(reltuple) for reltuple in reltuples.as_string_tuples()))
-        graph_sentence = reltuples.graph
+        print("\n".join(str(reltuple) for reltuple in reltuples.string_tuples))
         for edge in graph_sentence.edges:
             graph.add_edge(edge[0], edge[1], **graph_sentence.get_edge_data(*edge))
     conllu = model.write(sentences, "conllu")
@@ -325,8 +325,7 @@ if __name__ == "__main__":
         sentences = model.read(text, "conllu")
         for s in sentences:
             reltuples = SentenceReltuples(s)
-            output[s.getText()] = reltuples.as_string_tuples()
-            graph_sentence = reltuples.graph
+            output[s.getText()] = reltuples.string_tuples
             for node, attr in graph_sentence.nodes.items():
                 graph.add_node(node, **attr)
             for edge, attr in graph_sentence.edges.items():
