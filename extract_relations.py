@@ -56,7 +56,7 @@ class SentenceReltuples:
             for edge, attr in graph_right.edges.items():
                 graph.add_edge(edge[0], edge[1], **attr)
             for node in graph.nodes:
-                graph.nodes[node]["weight"] = len(graph[node])
+                graph.nodes[node]["weight"] = len(graph[node]) + 1
         return graph
 
     def _subtree_to_graph(self, word):
