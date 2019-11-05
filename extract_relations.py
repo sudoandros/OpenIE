@@ -1,6 +1,8 @@
 import argparse
+import io
 import json
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -230,6 +232,53 @@ class SentenceReltuples:
         return word.deprel == "conj"
 
 
+def save_graph(graph, path):
+    stream_buffer = io.BytesIO()
+    nx.write_gexf(graph, stream_buffer, encoding="utf-8", version="1.1draft")
+    xml_string = stream_buffer.getvalue().decode("utf-8")
+    root_element = ET.fromstring(xml_string)
+    fix_gexf(root_element)
+    ET.register_namespace("", "http://www.gexf.net/1.1draft")
+    xml_tree = ET.ElementTree(root_element)
+    xml_tree.write(path, encoding="utf-8")
+
+
+def fix_gexf(root_element):
+    graph_node = root_element.find("{http://www.gexf.net/1.1draft}graph")
+    attributes_nodes = graph_node.findall("{http://www.gexf.net/1.1draft}attributes")
+    edge_attributes = {}
+    node_attributes = {}
+    for attributes_node in attributes_nodes:
+        for attribute_node in attributes_node.findall(
+            "{http://www.gexf.net/1.1draft}attribute"
+        ):
+            attr_id = attribute_node.get("id")
+            attr_title = attribute_node.get("title")
+            attribute_node.set("id", attr_title)
+            if attributes_node.get("class") == "edge":
+                edge_attributes[attr_id] = attr_title
+            elif attributes_node.get("class") == "node":
+                node_attributes[attr_id] = attr_title
+    nodes_node = graph_node.find("{http://www.gexf.net/1.1draft}nodes")
+    for node_node in nodes_node.findall("{http://www.gexf.net/1.1draft}node"):
+        attvalues_node = node_node.find("{http://www.gexf.net/1.1draft}attvalues")
+        if attvalues_node is not None:
+            for attvalue_node in attvalues_node.findall(
+                "{http://www.gexf.net/1.1draft}attvalue"
+            ):
+                for_value = attvalue_node.get("for")
+                attvalue_node.set("for", node_attributes[for_value])
+    edges_node = graph_node.find("{http://www.gexf.net/1.1draft}edges")
+    for edge_node in edges_node.findall("{http://www.gexf.net/1.1draft}edge"):
+        attvalues_node = edge_node.find("{http://www.gexf.net/1.1draft}attvalues")
+        if attvalues_node is not None:
+            for attvalue_node in attvalues_node.findall(
+                "{http://www.gexf.net/1.1draft}attvalue"
+            ):
+                for_value = attvalue_node.get("for")
+                attvalue_node.set("for", edge_attributes[for_value])
+
+
 def simple_test(model):
     sentences = model.tokenize(
         "Андрей пошел в магазин и аптеку, купил куртку и телефон, на улице становилось темно. "
@@ -287,4 +336,4 @@ if __name__ == "__main__":
         with output_path.open("w", encoding="utf8") as file:
             json.dump(output, file, ensure_ascii=False, indent=4)
 
-    nx.write_gexf(graph, save_dir / "graph.gexf", version="1.1draft")
+    save_graph(graph, save_dir / "graph.gexf")
