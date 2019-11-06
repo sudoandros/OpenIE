@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -25,12 +26,21 @@ def text_from_hdr(filepath):
     return res
 
 
+def text_from_htm(filepath):
+    with open(filepath, mode="r", encoding="cp1251") as file:
+        match = re.search("</NOMORPH>.*</BODY>", file.read(), flags=re.DOTALL)
+    res = " ".join(match.group(0).split())
+    return res
+
+
 def parse(texts_dir, conllu_dir, udpipe_model, format_="sts"):
     for text_path in tqdm(texts_dir.iterdir()):
         if format_ == "sts" and text_path.suffix == ".sts":
             text = text_from_sts(text_path)
         elif format_ == "hdr" and text_path.suffix == ".hdr":
             text = text_from_hdr(text_path)
+        elif format_ == "htm" and text_path.suffix == ".htm":
+            text = text_from_htm(text_path)
         else:
             continue
 
@@ -56,7 +66,9 @@ if __name__ == "__main__":
         "conllu_dir", help="Directory where results of parsing should be saved to"
     )
     parser.add_argument(
-        "--format", help="Format of the texts to be processed", choices=["sts", "hdr"]
+        "--format",
+        help="Format of the texts to be processed",
+        choices=["sts", "hdr", "htm"],
     )
     args = parser.parse_args()
 
