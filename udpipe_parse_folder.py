@@ -34,6 +34,7 @@ def text_from_htm(filepath):
 
 
 def parse(texts_dir, conllu_dir, udpipe_model, format_="sts"):
+    tag_regex = re.compile("<[^>]+>")
     for text_path in tqdm(texts_dir.iterdir()):
         if format_ == "sts" and text_path.suffix == ".sts":
             text = text_from_sts(text_path)
@@ -43,6 +44,7 @@ def parse(texts_dir, conllu_dir, udpipe_model, format_="sts"):
             text = text_from_htm(text_path)
         else:
             continue
+        text = tag_regex.sub("", text)
 
         sentences = udpipe_model.tokenize(text)
         for s in sentences:
