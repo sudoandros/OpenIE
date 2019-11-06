@@ -59,11 +59,10 @@ def parse(texts_dir, conllu_dir, udpipe_model, format_="sts"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Parse every .sts file in specified directory using UDPipe"
-        " and save results in the same directory"
+        description="Parse every text file in specified directory using UDPipe"
     )
     parser.add_argument("model_path", help="Path to the UDPipe model")
-    parser.add_argument("texts_dir", help="Directory with sts text files")
+    parser.add_argument("texts_dir", help="Directory with text files")
     parser.add_argument(
         "conllu_dir", help="Directory where results of parsing should be saved to"
     )
