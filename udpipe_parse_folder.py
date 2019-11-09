@@ -9,7 +9,16 @@ from tqdm import tqdm
 from udpipe_model import UDPipeModel
 
 
-def text_from_sts(filepath):
+def get_text(filepath, format_="sts"):
+    if format_ == "sts":
+        return get_text_from_sts(filepath)
+    elif format_ == "hdr":
+        return get_text_from_hdr(filepath)
+    elif format_ == "htm":
+        return get_text_from_htm(filepath)
+
+
+def get_text_from_sts(filepath):
     res = []
     with filepath.open("r", encoding="cp1251") as f:
         for line in f:
@@ -17,7 +26,7 @@ def text_from_sts(filepath):
     return "\n".join(res)
 
 
-def text_from_hdr(filepath):
+def get_text_from_hdr(filepath):
     res = None
     with filepath.open("r", encoding="cp1251") as f:
         for line in f:
@@ -26,7 +35,7 @@ def text_from_hdr(filepath):
     return res
 
 
-def text_from_htm(filepath):
+def get_text_from_htm(filepath):
     with open(filepath, mode="r", encoding="cp1251") as file:
         match = re.search("</NOMORPH>.*</BODY>", file.read(), flags=re.DOTALL)
     res = " ".join(match.group(0).split())
@@ -36,12 +45,8 @@ def text_from_htm(filepath):
 def parse(texts_dir, conllu_dir, udpipe_model, format_="sts"):
     tag_regex = re.compile("<[^>]+>")
     for text_path in tqdm(texts_dir.iterdir()):
-        if format_ == "sts" and text_path.suffix == ".sts":
-            text = text_from_sts(text_path)
-        elif format_ == "hdr" and text_path.suffix == ".hdr":
-            text = text_from_hdr(text_path)
-        elif format_ == "htm" and text_path.suffix == ".htm":
-            text = text_from_htm(text_path)
+        if text_path.suffix == ".{}".format(format_):
+            text = get_text(text_path)
         else:
             continue
         text = tag_regex.sub("", text)
