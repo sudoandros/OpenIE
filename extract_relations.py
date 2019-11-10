@@ -169,15 +169,18 @@ class RelGraph:
         for reltuple in sentence_reltuples.string_tuples:
             node_str1 = self._clean_node(reltuple[0])
             node_str2 = self._clean_node(reltuple[2])
-            if node_str1 not in self._stopwords:
+            if not set(node_str1.split()).issubset(self._stopwords):
                 self._graph.add_node(
                     node_str1, description=sentence_reltuples.sentence.getText()
                 )
-            if node_str2 not in self._stopwords:
+            if not set(node_str2.split()).issubset(self._stopwords):
                 self._graph.add_node(
                     node_str2, description=sentence_reltuples.sentence.getText()
                 )
-            if node_str1 not in self._stopwords and node_str2 not in self._stopwords:
+            if not (
+                set(node_str1.split()).issubset(self._stopwords)
+                or set(node_str2.split()).issubset(self._stopwords)
+            ):
                 self._graph.add_edge(
                     node_str1, node_str2, label=reltuple[1], dependency="relation"
                 )
