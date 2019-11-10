@@ -181,14 +181,11 @@ class RelGraph:
                 self._graph.add_edge(
                     node_str1, node_str2, label=reltuple[1], dependency="relation"
                 )
-        sentence_text_clean = " ".join(
-            self._clean_node(word) for word in sentence_text.split()
-        )
+        sentence_text_clean = self._clean_node(sentence_text)
         for node in self._graph.nodes:
-            if node in sentence_text_clean:
                 self._graph.nodes[node]["weight"] = (
-                    self._graph.nodes[node].get("weight") or 0
-                ) + 1
+                self._graph.nodes[node].get("weight") or 1
+            ) + sentence_text_clean.count(node)
 
     def save(self, path):
         stream_buffer = io.BytesIO()
