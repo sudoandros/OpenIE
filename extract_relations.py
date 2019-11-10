@@ -1,6 +1,7 @@
 import argparse
 import io
 import json
+import string
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -154,32 +155,32 @@ class SentenceReltuples:
 
 
 class RelGraph:
-    def __init__(self):
+    def __init__(self, stopwords):
         self._graph = nx.DiGraph()
+        self._stopwords = set(stopwords)
 
     @classmethod
-    def from_reltuples_list(cls, reltuples_list):
-        graph = cls()
+    def from_reltuples_list(cls, stopwords, reltuples_list):
+        graph = cls(stopwords)
         for sentence_reltuple in reltuples_list:
             graph.add_sentence_reltuples(sentence_reltuple)
 
     def add_sentence_reltuples(self, sentence_reltuples):
         for reltuple in sentence_reltuples.string_tuples:
-            node_str1 = "".join(
-                char for char in reltuple[0] if char.isalnum() or char.isspace()
-            ).lower()
-            node_str2 = "".join(
-                char for char in reltuple[2] if char.isalnum() or char.isspace()
-            ).lower()
-            self._graph.add_node(
-                node_str1, description=sentence_reltuples.sentence.getText()
-            )
-            self._graph.add_node(
-                node_str2, description=sentence_reltuples.sentence.getText()
-            )
-            self._graph.add_edge(
-                node_str1, node_str2, label=reltuple[1], dependency="relation"
-            )
+            node_str1 = self._clean_node(reltuple[0])
+            node_str2 = self._clean_node(reltuple[2])
+            if node_str1 not in self._stopwords:
+                self._graph.add_node(
+                    node_str1, description=sentence_reltuples.sentence.getText()
+                )
+            if node_str2 not in self._stopwords:
+                self._graph.add_node(
+                    node_str2, description=sentence_reltuples.sentence.getText()
+                )
+            if node_str1 not in self._stopwords and node_str2 not in self._stopwords:
+                self._graph.add_edge(
+                    node_str1, node_str2, label=reltuple[1], dependency="relation"
+                )
             for node in self._graph.nodes:
                 self._graph.nodes[node]["weight"] = len(self._graph[node]) + 1
 
@@ -192,6 +193,18 @@ class RelGraph:
         ET.register_namespace("", "http://www.gexf.net/1.1draft")
         xml_tree = ET.ElementTree(root_element)
         xml_tree.write(path, encoding="utf-8")
+
+    def _clean_node(self, node_string):
+        res = (
+            "".join(
+                char
+                for char in node_string
+                if char.isalnum() or char.isspace() or char in ",.;-—/:%"
+            )
+            .lower()
+            .strip(" .,:;")
+        )
+        return res
 
     def _fix_gexf(self, root_element):
         graph_node = root_element.find("{http://www.gexf.net/1.1draft}graph")
@@ -228,32 +241,11 @@ class RelGraph:
                     "{http://www.gexf.net/1.1draft}attvalue"
                 ):
                     attr_for = attvalue_node.get("for")
-                    if edge_attributes[attr_for]== "label":
+                    if edge_attributes[attr_for] == "label":
                         attr_value = attvalue_node.get("value")
                         edge_node.set("label", attr_value)
                         attvalues_node.remove(attvalue_node)
                     attvalue_node.set("for", edge_attributes[attr_for])
-
-
-def simple_test(model):
-    sentences = model.tokenize(
-        "Андрей пошел в магазин и аптеку, купил куртку и телефон, на улице становилось темно. "
-        "Никита определенно не будет бегать в парке, а Андрей, Дима и Федор варили и жарили обед. "
-        "Андрей, пока собирался на работу, съел завтрак. "
-        "С помощью уязвимости злоумышленник может авторизоваться в уязвимой системе и начать выполнять произвольные команды суперпользователя и творить фигню. "
-    )
-    graph = RelGraph()
-    for s in sentences:
-        model.tag(s)
-        model.parse(s)
-        reltuples = SentenceReltuples(s)
-        graph.add_sentence_reltuples(reltuples)
-        print(s.getText())
-        print("\n".join(str(reltuple) for reltuple in reltuples.string_tuples))
-    conllu = model.write(sentences, "conllu")
-    with open("data/test_output/output.conllu", "w", encoding="utf8") as file:
-        file.write(conllu)
-    nx.write_gexf(graph, "data/test_output/graph.gexf")
 
 
 if __name__ == "__main__":
@@ -268,23 +260,25 @@ if __name__ == "__main__":
     conllu_dir = Path(args.conllu_dir)
     save_dir = Path(args.save_dir)
     model = UDPipeModel(args.model_path)
-        graph = RelGraph()
+    with open("stopwords.txt", mode="r", encoding="utf-8") as file:
+        stopwords = list(file.read().split())
 
+    graph = RelGraph(stopwords)
     for path in tqdm(conllu_dir.iterdir()):
-            output = {}
-            if not (path.suffix == ".conllu"):
-                continue
-            with path.open("r", encoding="utf8") as file:
-                text = file.read()
-            sentences = model.read(text, "conllu")
-            for s in sentences:
-                reltuples = SentenceReltuples(s)
-                output[s.getText()] = reltuples.string_tuples
-                graph.add_sentence_reltuples(reltuples)
+        output = {}
+        if not (path.suffix == ".conllu"):
+            continue
+        with path.open("r", encoding="utf8") as file:
+            text = file.read()
+        sentences = model.read(text, "conllu")
+        for s in sentences:
+            reltuples = SentenceReltuples(s)
+            output[s.getText()] = reltuples.string_tuples
+            graph.add_sentence_reltuples(reltuples)
 
         output_path = save_dir / (path.stem + "_reltuples.json")
-            with output_path.open("w", encoding="utf8") as file:
-                json.dump(output, file, ensure_ascii=False, indent=4)
+        with output_path.open("w", encoding="utf8") as file:
+            json.dump(output, file, ensure_ascii=False, indent=4)
 
     graph.save(save_dir / "graph.gexf")
 
