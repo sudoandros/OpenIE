@@ -165,10 +165,20 @@ class RelGraph:
 
     def add_sentence_reltuples(self, sentence_reltuples):
         for reltuple in sentence_reltuples.string_tuples:
-            self._graph.add_node(reltuple[0])
-            self._graph.add_node(reltuple[2])
+            node_str1 = "".join(
+                char for char in reltuple[0] if char.isalnum() or char.isspace()
+            ).lower()
+            node_str2 = "".join(
+                char for char in reltuple[2] if char.isalnum() or char.isspace()
+            ).lower()
+            self._graph.add_node(
+                node_str1, description=sentence_reltuples.sentence.getText()
+            )
+            self._graph.add_node(
+                node_str2, description=sentence_reltuples.sentence.getText()
+            )
             self._graph.add_edge(
-                reltuple[0], reltuple[2], label=reltuple[1], dependency="relation"
+                node_str1, node_str2, label=reltuple[1], dependency="relation"
             )
             for node in self._graph.nodes:
                 self._graph.nodes[node]["weight"] = len(self._graph[node]) + 1
