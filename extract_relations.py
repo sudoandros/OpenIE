@@ -218,8 +218,8 @@ class RelGraph:
                 for attvalue_node in attvalues_node.findall(
                     "{http://www.gexf.net/1.1draft}attvalue"
                 ):
-                    for_value = attvalue_node.get("for")
-                    attvalue_node.set("for", node_attributes[for_value])
+                    attr_for = attvalue_node.get("for")
+                    attvalue_node.set("for", node_attributes[attr_for])
         edges_node = graph_node.find("{http://www.gexf.net/1.1draft}edges")
         for edge_node in edges_node.findall("{http://www.gexf.net/1.1draft}edge"):
             attvalues_node = edge_node.find("{http://www.gexf.net/1.1draft}attvalues")
@@ -227,8 +227,12 @@ class RelGraph:
                 for attvalue_node in attvalues_node.findall(
                     "{http://www.gexf.net/1.1draft}attvalue"
                 ):
-                    for_value = attvalue_node.get("for")
-                    attvalue_node.set("for", edge_attributes[for_value])
+                    attr_for = attvalue_node.get("for")
+                    if edge_attributes[attr_for]== "label":
+                        attr_value = attvalue_node.get("value")
+                        edge_node.set("label", attr_value)
+                        attvalues_node.remove(attvalue_node)
+                    attvalue_node.set("for", edge_attributes[attr_for])
 
 
 def simple_test(model):
@@ -264,23 +268,23 @@ if __name__ == "__main__":
     conllu_dir = Path(args.conllu_dir)
     save_dir = Path(args.save_dir)
     model = UDPipeModel(args.model_path)
-    graph = RelGraph()
+        graph = RelGraph()
 
     for path in tqdm(conllu_dir.iterdir()):
-        output = {}
-        if not (path.suffix == ".conllu"):
-            continue
-        with path.open("r", encoding="utf8") as file:
-            text = file.read()
-        sentences = model.read(text, "conllu")
-        for s in sentences:
-            reltuples = SentenceReltuples(s)
-            output[s.getText()] = reltuples.string_tuples
-            graph.add_sentence_reltuples(reltuples)
+            output = {}
+            if not (path.suffix == ".conllu"):
+                continue
+            with path.open("r", encoding="utf8") as file:
+                text = file.read()
+            sentences = model.read(text, "conllu")
+            for s in sentences:
+                reltuples = SentenceReltuples(s)
+                output[s.getText()] = reltuples.string_tuples
+                graph.add_sentence_reltuples(reltuples)
 
         output_path = save_dir / (path.stem + "_reltuples.json")
-        with output_path.open("w", encoding="utf8") as file:
-            json.dump(output, file, ensure_ascii=False, indent=4)
+            with output_path.open("w", encoding="utf8") as file:
+                json.dump(output, file, ensure_ascii=False, indent=4)
 
     graph.save(save_dir / "graph.gexf")
 
