@@ -9,13 +9,15 @@ from tqdm import tqdm
 from udpipe_model import UDPipeModel
 
 
-def get_text(filepath, format_="sts"):
+def get_text(filepath, format_=None):
     if format_ == "sts":
         return get_text_from_sts(filepath)
     elif format_ == "hdr":
         return get_text_from_hdr(filepath)
     elif format_ == "htm":
         return get_text_from_htm(filepath)
+    else:
+        raise ValueError("This format is not supported")
 
 
 def get_text_from_sts(filepath):
@@ -46,7 +48,7 @@ def parse(texts_dir, conllu_dir, udpipe_model, format_="sts"):
     tag_regex = re.compile("<[^>]+>")
     for text_path in tqdm(texts_dir.iterdir()):
         if text_path.suffix == ".{}".format(format_):
-            text = get_text(text_path)
+            text = get_text(text_path, format_=format_)
         else:
             continue
         text = tag_regex.sub("", text)
