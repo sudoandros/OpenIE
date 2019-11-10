@@ -166,17 +166,14 @@ class RelGraph:
             graph.add_sentence_reltuples(sentence_reltuple)
 
     def add_sentence_reltuples(self, sentence_reltuples):
+        sentence_text = sentence_reltuples.sentence.getText()
         for reltuple in sentence_reltuples.string_tuples:
             node_str1 = self._clean_node(reltuple[0])
             node_str2 = self._clean_node(reltuple[2])
             if not set(node_str1.split()).issubset(self._stopwords):
-                self._graph.add_node(
-                    node_str1, description=sentence_reltuples.sentence.getText()
-                )
+                self._graph.add_node(node_str1, description=sentence_text)
             if not set(node_str2.split()).issubset(self._stopwords):
-                self._graph.add_node(
-                    node_str2, description=sentence_reltuples.sentence.getText()
-                )
+                self._graph.add_node(node_str2, description=sentence_text)
             if not (
                 set(node_str1.split()).issubset(self._stopwords)
                 or set(node_str2.split()).issubset(self._stopwords)
@@ -184,8 +181,14 @@ class RelGraph:
                 self._graph.add_edge(
                     node_str1, node_str2, label=reltuple[1], dependency="relation"
                 )
-            for node in self._graph.nodes:
-                self._graph.nodes[node]["weight"] = len(self._graph[node]) + 1
+        sentence_text_clean = " ".join(
+            self._clean_node(word) for word in sentence_text.split()
+        )
+        for node in self._graph.nodes:
+            if node in sentence_text_clean:
+                self._graph.nodes[node]["weight"] = (
+                    self._graph.nodes[node].get("weight") or 0
+                ) + 1
 
     def save(self, path):
         stream_buffer = io.BytesIO()
