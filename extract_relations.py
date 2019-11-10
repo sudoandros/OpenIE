@@ -31,99 +31,6 @@ class SentenceReltuples:
         right = self._subtree_to_string(reltuple[2])
         return (left, center, right)
 
-    @property
-    def simple_relation_graph(self):
-        graph = nx.DiGraph()
-        for reltuple in self.string_tuples:
-            graph.add_node(reltuple[0])
-            graph.add_node(reltuple[2])
-            graph.add_edge(
-                reltuple[0], reltuple[2], label=reltuple[1], dependency="relation"
-            )
-            for node in graph.nodes:
-                graph.nodes[node]["weight"] = len(graph[node]) + 1
-        return graph
-
-    @property
-    def syntax_relation_graph(self):
-        graph = nx.DiGraph()
-        for reltuple in self.reltuples:
-            graph.add_node(reltuple[0].form, node_type="arg")
-            graph.add_node(reltuple[1].form, node_type="arg")
-            graph.add_node(reltuple[2].form, node_type="arg")
-            graph.add_edge(reltuple[0].form, reltuple[1].form, dependency="relation")
-            graph.add_edge(reltuple[1].form, reltuple[2].form, dependency="relation")
-            graph_left = self._subtree_to_graph(reltuple[0])
-            graph_center = self._relation_to_graph(reltuple[1])
-            graph_right = self._subtree_to_graph(reltuple[2])
-            for node, attr in graph_left.nodes.items():
-                attr["node_type"] = "arg"
-                graph.add_node(node, **attr)
-            for node, attr in graph_center.nodes.items():
-                attr["node_type"] = "rel"
-                graph.add_node(node, **attr)
-            for node, attr in graph_right.nodes.items():
-                attr["node_type"] = "arg"
-                graph.add_node(node, **attr)
-            for edge, attr in graph_left.edges.items():
-                graph.add_edge(edge[0], edge[1], **attr)
-            for edge, attr in graph_center.edges.items():
-                graph.add_edge(edge[0], edge[1], **attr)
-            for edge, attr in graph_right.edges.items():
-                graph.add_edge(edge[0], edge[1], **attr)
-            for node in graph.nodes:
-                graph.nodes[node]["weight"] = len(graph[node]) + 1
-        return graph
-
-    def _subtree_to_graph(self, word):
-        graph = nx.DiGraph()
-        for child_idx in word.children:
-            child = self.sentence.words[child_idx]
-            graph.add_node(word.form)
-            graph.add_node(child.form)
-            graph.add_edge(word.form, child.form, dependency="syntax")
-            child_graph = self._subtree_to_graph(child)
-            for node, attr in child_graph.nodes.items():
-                graph.add_node(node, **attr)
-            for edge, attr in child_graph.edges.items():
-                graph.add_edge(edge[0], edge[1], **attr)
-        return graph
-
-    def _relation_to_graph(self, word):
-        graph = nx.DiGraph()
-        for child_idx in word.children:
-            child = self.sentence.words[child_idx]
-            if (
-                child.deprel == "case"
-                or child.deprel == "aux"
-                or child.deprel == "aux:pass"
-                or child.upostag == "PART"
-            ):
-                graph.add_node(word.form)
-                graph.add_node(child.form)
-                graph.add_edge(word.form, child.form, dependency="syntax")
-        parent = self.sentence.words[word.head]
-        if word.deprel == "xcomp":
-            graph.add_node(parent.form)
-            graph.add_node(word.form)
-            graph.add_edge(parent.form, word.form, dependency="syntax")
-            graph_parent = self._relation_to_graph(parent)
-            for node, attr in graph_parent.nodes.items():
-                graph.add_node(node, **attr)
-            for edge, attr in graph_parent.edges.items():
-                graph.add_edge(edge[0], edge[1], **attr)
-        if self._is_conjunct(word) and parent.deprel == "xcomp":
-            grandparent = self.sentence.words[parent.head]
-            graph.add_node(grandparent.form)
-            graph.add_node(word.form)
-            graph.add_edge(grandparent.form, word.form, dependency="syntax")
-            graph_grandparent = self._relation_to_graph(grandparent)
-            for node, attr in graph_grandparent.nodes.items():
-                graph.add_node(node, **attr)
-            for edge, attr in graph_grandparent.edges.items():
-                graph.add_edge(edge[0], edge[1], **attr)
-        return graph
-
     def _extract_reltuples(self):
         verbs = [word for word in self.sentence.words if word.upostag == "VERB"]
         for verb in verbs:
@@ -246,51 +153,72 @@ class SentenceReltuples:
         return word.deprel == "conj"
 
 
-def save_graph(graph, path):
-    stream_buffer = io.BytesIO()
-    nx.write_gexf(graph, stream_buffer, encoding="utf-8", version="1.1draft")
-    xml_string = stream_buffer.getvalue().decode("utf-8")
-    root_element = ET.fromstring(xml_string)
-    fix_gexf(root_element)
-    ET.register_namespace("", "http://www.gexf.net/1.1draft")
-    xml_tree = ET.ElementTree(root_element)
-    xml_tree.write(path, encoding="utf-8")
+class RelGraph:
+    def __init__(self):
+        self._graph = nx.DiGraph()
 
+    @classmethod
+    def from_reltuples_list(cls, reltuples_list):
+        graph = cls()
+        for sentence_reltuple in reltuples_list:
+            graph.add_sentence_reltuples(sentence_reltuple)
 
-def fix_gexf(root_element):
-    graph_node = root_element.find("{http://www.gexf.net/1.1draft}graph")
-    attributes_nodes = graph_node.findall("{http://www.gexf.net/1.1draft}attributes")
-    edge_attributes = {}
-    node_attributes = {}
-    for attributes_node in attributes_nodes:
-        for attribute_node in attributes_node.findall(
-            "{http://www.gexf.net/1.1draft}attribute"
-        ):
-            attr_id = attribute_node.get("id")
-            attr_title = attribute_node.get("title")
-            attribute_node.set("id", attr_title)
-            if attributes_node.get("class") == "edge":
-                edge_attributes[attr_id] = attr_title
-            elif attributes_node.get("class") == "node":
-                node_attributes[attr_id] = attr_title
-    nodes_node = graph_node.find("{http://www.gexf.net/1.1draft}nodes")
-    for node_node in nodes_node.findall("{http://www.gexf.net/1.1draft}node"):
-        attvalues_node = node_node.find("{http://www.gexf.net/1.1draft}attvalues")
-        if attvalues_node is not None:
-            for attvalue_node in attvalues_node.findall(
-                "{http://www.gexf.net/1.1draft}attvalue"
+    def add_sentence_reltuples(self, sentence_reltuples):
+        for reltuple in sentence_reltuples.string_tuples:
+            self._graph.add_node(reltuple[0])
+            self._graph.add_node(reltuple[2])
+            self._graph.add_edge(
+                reltuple[0], reltuple[2], label=reltuple[1], dependency="relation"
+            )
+            for node in self._graph.nodes:
+                self._graph.nodes[node]["weight"] = len(self._graph[node]) + 1
+
+    def save(self, path):
+        stream_buffer = io.BytesIO()
+        nx.write_gexf(self._graph, stream_buffer, encoding="utf-8", version="1.1draft")
+        xml_string = stream_buffer.getvalue().decode("utf-8")
+        root_element = ET.fromstring(xml_string)
+        self._fix_gexf(root_element)
+        ET.register_namespace("", "http://www.gexf.net/1.1draft")
+        xml_tree = ET.ElementTree(root_element)
+        xml_tree.write(path, encoding="utf-8")
+
+    def _fix_gexf(self, root_element):
+        graph_node = root_element.find("{http://www.gexf.net/1.1draft}graph")
+        attributes_nodes = graph_node.findall(
+            "{http://www.gexf.net/1.1draft}attributes"
+        )
+        edge_attributes = {}
+        node_attributes = {}
+        for attributes_node in attributes_nodes:
+            for attribute_node in attributes_node.findall(
+                "{http://www.gexf.net/1.1draft}attribute"
             ):
-                for_value = attvalue_node.get("for")
-                attvalue_node.set("for", node_attributes[for_value])
-    edges_node = graph_node.find("{http://www.gexf.net/1.1draft}edges")
-    for edge_node in edges_node.findall("{http://www.gexf.net/1.1draft}edge"):
-        attvalues_node = edge_node.find("{http://www.gexf.net/1.1draft}attvalues")
-        if attvalues_node is not None:
-            for attvalue_node in attvalues_node.findall(
-                "{http://www.gexf.net/1.1draft}attvalue"
-            ):
-                for_value = attvalue_node.get("for")
-                attvalue_node.set("for", edge_attributes[for_value])
+                attr_id = attribute_node.get("id")
+                attr_title = attribute_node.get("title")
+                attribute_node.set("id", attr_title)
+                if attributes_node.get("class") == "edge":
+                    edge_attributes[attr_id] = attr_title
+                elif attributes_node.get("class") == "node":
+                    node_attributes[attr_id] = attr_title
+        nodes_node = graph_node.find("{http://www.gexf.net/1.1draft}nodes")
+        for node_node in nodes_node.findall("{http://www.gexf.net/1.1draft}node"):
+            attvalues_node = node_node.find("{http://www.gexf.net/1.1draft}attvalues")
+            if attvalues_node is not None:
+                for attvalue_node in attvalues_node.findall(
+                    "{http://www.gexf.net/1.1draft}attvalue"
+                ):
+                    for_value = attvalue_node.get("for")
+                    attvalue_node.set("for", node_attributes[for_value])
+        edges_node = graph_node.find("{http://www.gexf.net/1.1draft}edges")
+        for edge_node in edges_node.findall("{http://www.gexf.net/1.1draft}edge"):
+            attvalues_node = edge_node.find("{http://www.gexf.net/1.1draft}attvalues")
+            if attvalues_node is not None:
+                for attvalue_node in attvalues_node.findall(
+                    "{http://www.gexf.net/1.1draft}attvalue"
+                ):
+                    for_value = attvalue_node.get("for")
+                    attvalue_node.set("for", edge_attributes[for_value])
 
 
 def simple_test(model):
@@ -300,16 +228,14 @@ def simple_test(model):
         "Андрей, пока собирался на работу, съел завтрак. "
         "С помощью уязвимости злоумышленник может авторизоваться в уязвимой системе и начать выполнять произвольные команды суперпользователя и творить фигню. "
     )
-    graph = nx.DiGraph()
+    graph = RelGraph()
     for s in sentences:
         model.tag(s)
         model.parse(s)
         reltuples = SentenceReltuples(s)
+        graph.add_sentence_reltuples(reltuples)
         print(s.getText())
         print("\n".join(str(reltuple) for reltuple in reltuples.string_tuples))
-        graph_sentence = reltuples.simple_relation_graph
-        for edge in graph_sentence.edges:
-            graph.add_edge(edge[0], edge[1], **graph_sentence.get_edge_data(*edge))
     conllu = model.write(sentences, "conllu")
     with open("data/test_output/output.conllu", "w", encoding="utf8") as file:
         file.write(conllu)
@@ -328,7 +254,7 @@ if __name__ == "__main__":
     conllu_dir = Path(args.conllu_dir)
     save_dir = Path(args.save_dir)
     model = UDPipeModel(args.model_path)
-    graph = nx.DiGraph()
+    graph = RelGraph()
 
     for path in tqdm(conllu_dir.iterdir()):
         output = {}
@@ -340,14 +266,11 @@ if __name__ == "__main__":
         for s in sentences:
             reltuples = SentenceReltuples(s)
             output[s.getText()] = reltuples.string_tuples
-            graph_sentence = reltuples.simple_relation_graph
-            for node, attr in graph_sentence.nodes.items():
-                graph.add_node(node, **attr)
-            for edge, attr in graph_sentence.edges.items():
-                graph.add_edge(edge[0], edge[1], **attr)
+            graph.add_sentence_reltuples(reltuples)
 
         output_path = save_dir / (path.stem + "_reltuples.json")
         with output_path.open("w", encoding="utf8") as file:
             json.dump(output, file, ensure_ascii=False, indent=4)
 
-    save_graph(graph, save_dir / "graph.gexf")
+    graph.save(save_dir / "graph.gexf")
+
