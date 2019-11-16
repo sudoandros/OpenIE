@@ -178,9 +178,14 @@ class RelGraph:
                 set(node_str1.split()).issubset(self._stopwords)
                 or set(node_str2.split()).issubset(self._stopwords)
             ):
-                self._graph.add_edge(
-                    node_str1, node_str2, label=reltuple[1], dependency="relation"
+                if self._graph.has_edge(node_str1, node_str2) and reltuple[
+                    1
+                ] not in self._graph[node_str1][node_str2]["label"].split(" | "):
+                    self._graph[node_str1][node_str2]["label"] = "{} | {}".format(
+                        self._graph[node_str1][node_str2]["label"], reltuple[1]
                 )
+                else:
+                    self._graph.add_edge(node_str1, node_str2, label=reltuple[1])
         sentence_text_clean = self._clean_node(sentence_text)
         for node in self._graph.nodes:
                 self._graph.nodes[node]["weight"] = (
