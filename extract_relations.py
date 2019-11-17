@@ -170,10 +170,8 @@ class RelGraph:
         for reltuple in sentence_reltuples.string_tuples:
             node_str1 = self._clean_node(reltuple[0])
             node_str2 = self._clean_node(reltuple[2])
-            if not set(node_str1.split()).issubset(self._stopwords):
-                self._graph.add_node(node_str1, description=sentence_text)
-            if not set(node_str2.split()).issubset(self._stopwords):
-                self._graph.add_node(node_str2, description=sentence_text)
+            self._add_node(node_str1, sentence_text)
+            self._add_node(node_str2, sentence_text)
             if not (
                 set(node_str1.split()).issubset(self._stopwords)
                 or set(node_str2.split()).issubset(self._stopwords)
@@ -203,6 +201,20 @@ class RelGraph:
                 self._graph.nodes[node]["weight"] = (
                 self._graph.nodes[node].get("weight") or 1
             ) + sentence_text_clean.count(node)
+
+    def _add_node(self, node_name, sentence_text):
+        if set(node_name.split()).issubset(self._stopwords):
+            return
+        if node_name not in self._graph:
+            self._graph.add_node(node_name, description=sentence_text)
+            return
+        # this node already exists
+        if sentence_text not in self._graph.nodes[node_name]["description"].split(
+            " | "
+        ):
+            self._graph.nodes[node_name]["description"] = "{} | {}".format(
+                self._graph.nodes[node_name]["description"], sentence_text
+            )
 
     def save(self, path):
         stream_buffer = io.BytesIO()
