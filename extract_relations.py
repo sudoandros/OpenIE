@@ -181,13 +181,25 @@ class RelGraph:
                 if self._graph.has_edge(node_str1, node_str2) and reltuple[
                     1
                 ] not in self._graph[node_str1][node_str2]["label"].split(" | "):
+                    self._graph[node_str1][node_str2]["weight"] = (
+                        self._graph[node_str1][node_str2]["weight"] + 1
+                    )
                     self._graph[node_str1][node_str2]["label"] = "{} | {}".format(
                         self._graph[node_str1][node_str2]["label"], reltuple[1]
                 )
+                    self._graph[node_str1][node_str2]["description"] = "{} | {}".format(
+                        self._graph[node_str1][node_str2]["description"], sentence_text
+                    )
                 else:
-                    self._graph.add_edge(node_str1, node_str2, label=reltuple[1])
+                    self._graph.add_edge(
+                        node_str1,
+                        node_str2,
+                        label=reltuple[1],
+                        description=sentence_text,
+                        weight=1,
+                    )
         sentence_text_clean = self._clean_node(sentence_text)
-        for node in self._graph.nodes:
+        for node in self._graph:
                 self._graph.nodes[node]["weight"] = (
                 self._graph.nodes[node].get("weight") or 1
             ) + sentence_text_clean.count(node)
