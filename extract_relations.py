@@ -172,35 +172,33 @@ class RelGraph:
             node_str2 = self._clean_node(reltuple[2])
             self._add_node(node_str1, sentence_text)
             self._add_node(node_str2, sentence_text)
-            if not (
-                set(node_str1.split()).issubset(self._stopwords)
-                or set(node_str2.split()).issubset(self._stopwords)
-            ):
-                if self._graph.has_edge(node_str1, node_str2) and reltuple[
-                    1
-                ] not in self._graph[node_str1][node_str2]["label"].split(" | "):
-                    self._graph[node_str1][node_str2]["weight"] = (
-                        self._graph[node_str1][node_str2]["weight"] + 1
-                    )
-                    self._graph[node_str1][node_str2]["label"] = "{} | {}".format(
-                        self._graph[node_str1][node_str2]["label"], reltuple[1]
-                )
-                    self._graph[node_str1][node_str2]["description"] = "{} | {}".format(
-                        self._graph[node_str1][node_str2]["description"], sentence_text
-                    )
-                else:
-                    self._graph.add_edge(
-                        node_str1,
-                        node_str2,
-                        label=reltuple[1],
-                        description=sentence_text,
-                        weight=1,
-                    )
+            self._add_edge(node_str1, node_str2, reltuple[1], sentence_text)
         sentence_text_clean = self._clean_node(sentence_text)
         for node in self._graph:
                 self._graph.nodes[node]["weight"] = (
                 self._graph.nodes[node].get("weight") or 1
             ) + sentence_text_clean.count(node)
+
+    def _add_edge(self, source, target, label, sentence_text):
+        if not source in self._graph or not target in self._graph:
+            return
+        if not self._graph.has_edge(source, target):
+            self._graph.add_edge(
+                source, target, label=label, description=sentence_text, weight=1
+            )
+            return
+        # this edge already exists
+        if label not in self._graph[source][target]["label"].split(" | "):
+            self._graph[source][target]["label"] = "{} | {}".format(
+                self._graph[source][target]["label"], label
+            )
+        if sentence_text not in self._graph[source][target]["description"].split(" | "):
+            self._graph[source][target]["description"] = "{} | {}".format(
+                self._graph[source][target]["description"], sentence_text
+            )
+        self._graph[source][target]["weight"] = (
+            self._graph[source][target]["weight"] + 1
+        )
 
     def _add_node(self, node_name, sentence_text):
         if set(node_name.split()).issubset(self._stopwords):
