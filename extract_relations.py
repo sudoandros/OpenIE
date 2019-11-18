@@ -173,11 +173,6 @@ class RelGraph:
             self._add_node(node_str1, sentence_text)
             self._add_node(node_str2, sentence_text)
             self._add_edge(node_str1, node_str2, reltuple[1], sentence_text)
-        sentence_text_clean = self._clean_node(sentence_text)
-        for node in self._graph:
-                self._graph.nodes[node]["weight"] = (
-                self._graph.nodes[node].get("weight") or 1
-            ) + sentence_text_clean.count(node)
 
     def _add_edge(self, source, target, label, sentence_text):
         if not source in self._graph or not target in self._graph:
@@ -196,15 +191,13 @@ class RelGraph:
             self._graph[source][target]["description"] = "{} | {}".format(
                 self._graph[source][target]["description"], sentence_text
             )
-        self._graph[source][target]["weight"] = (
-            self._graph[source][target]["weight"] + 1
-        )
+        self._graph[source][target]["weight"] += 1
 
     def _add_node(self, node_name, sentence_text):
         if set(node_name.split()).issubset(self._stopwords):
             return
         if node_name not in self._graph:
-            self._graph.add_node(node_name, description=sentence_text)
+            self._graph.add_node(node_name, description=sentence_text, weight=1)
             return
         # this node already exists
         if sentence_text not in self._graph.nodes[node_name]["description"].split(
@@ -213,6 +206,7 @@ class RelGraph:
             self._graph.nodes[node_name]["description"] = "{} | {}".format(
                 self._graph.nodes[node_name]["description"], sentence_text
             )
+        self._graph.nodes[node_name]["weight"] += 1
 
     def save(self, path):
         stream_buffer = io.BytesIO()
