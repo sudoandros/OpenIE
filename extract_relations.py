@@ -194,7 +194,9 @@ class RelGraph:
         self._graph[source][target]["weight"] += 1
 
     def _add_node(self, node_name, sentence_text):
-        if set(node_name.split()).issubset(self._stopwords):
+        if set(node_name.split()).issubset(self._stopwords) or (
+            len(node_name) == 1 and node_name.isalpha()
+        ):
             return
         if node_name not in self._graph:
             self._graph.add_node(node_name, description=sentence_text, weight=1)
