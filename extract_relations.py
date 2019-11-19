@@ -165,11 +165,13 @@ class RelGraph:
         for sentence_reltuple in reltuples_list:
             graph.add_sentence_reltuples(sentence_reltuple)
 
-    def add_sentence_reltuples(self, sentence_reltuples):
+    def add_sentence_reltuples(self, sentence_reltuples, include_syntax=False):
         for reltuple in sentence_reltuples.reltuples:
-            self._add_reltuple(reltuple, sentence_reltuples)
+            self._add_reltuple(
+                reltuple, sentence_reltuples, include_syntax=include_syntax
+            )
 
-    def _add_reltuple(self, reltuple, sentence_reltuples):
+    def _add_reltuple(self, reltuple, sentence_reltuples, include_syntax=False):
         source = sentence_reltuples.arg_to_string(reltuple[0])
         target = sentence_reltuples.arg_to_string(reltuple[2])
         relation = sentence_reltuples.relation_to_string(reltuple[1])
@@ -177,6 +179,9 @@ class RelGraph:
         self._add_node(source, sentence_text)
         self._add_node(target, sentence_text)
         self._add_edge(source, target, relation, sentence_text)
+        if include_syntax:
+            self._add_syntax_tree(reltuple[0], sentence_reltuples)
+            self._add_syntax_tree(reltuple[2], sentence_reltuples)
 
     def _add_edge(self, source, target, label, description):
         if source not in self._graph or target not in self._graph:
@@ -207,9 +212,7 @@ class RelGraph:
             self._graph.add_node(name, description=description, weight=1)
             return
         # this node already exists
-        if description not in self._graph.nodes[name]["description"].split(
-            " | "
-        ):
+        if description not in self._graph.nodes[name]["description"].split(" | "):
             self._graph.nodes[name]["description"] = "{} | {}".format(
                 self._graph.nodes[name]["description"], description
             )
@@ -224,6 +227,30 @@ class RelGraph:
         ET.register_namespace("", "http://www.gexf.net/1.1draft")
         xml_tree = ET.ElementTree(root_element)
         xml_tree.write(path, encoding="utf-8")
+
+    def _add_syntax_tree(self, rel_arg, sentence_reltuples):
+        full_arg_string = sentence_reltuples.arg_to_string(rel_arg)
+        full_arg_string = self._clean_node(full_arg_string)
+        self._add_word(rel_arg, sentence_reltuples)
+        self._add_edge(
+            rel_arg.lemma,
+            full_arg_string,
+            rel_arg.deprel,
+            sentence_reltuples.sentence.getText(),
+        )
+
+    def _add_word(self, word, sentence_reltuples):
+        self._add_node(word.lemma, sentence_reltuples.sentence.getText())
+        parent = sentence_reltuples.sentence.words[word.head]
+        self._add_edge(
+            word.lemma,
+            parent.lemma,
+            word.deprel,
+            sentence_reltuples.sentence.getText(),
+        )
+        for child_idx in word.children:
+            child = sentence_reltuples.sentence.words[child_idx]
+            self._add_word(child, sentence_reltuples)
 
     def _clean_node(self, node_string):
         res = (
@@ -287,6 +314,11 @@ if __name__ == "__main__":
         help="Path to the directory containing parsed text in conllu format",
     )
     parser.add_argument("save_dir", help="Path to the directory to save relations to")
+    parser.add_argument(
+        "--include-syntax",
+        help="Include syntax tree of every phrase in the graph",
+        action="store_true",
+    )
     args = parser.parse_args()
     conllu_dir = Path(args.conllu_dir)
     save_dir = Path(args.save_dir)
@@ -305,7 +337,7 @@ if __name__ == "__main__":
         for s in sentences:
             reltuples = SentenceReltuples(s)
             output[s.getText()] = reltuples.string_tuples
-            graph.add_sentence_reltuples(reltuples)
+            graph.add_sentence_reltuples(reltuples, include_syntax=args.include_syntax)
 
         output_path = save_dir / (path.stem + "_reltuples.json")
         with output_path.open("w", encoding="utf8") as file:
