@@ -167,20 +167,23 @@ class RelGraph:
 
     def add_sentence_reltuples(self, sentence_reltuples):
         for reltuple in sentence_reltuples.reltuples:
-            self._add_edge(reltuple, sentence_reltuples)
+            self._add_reltuple(reltuple, sentence_reltuples)
 
-    def _add_edge(self, reltuple, sentence_reltuples):
+    def _add_reltuple(self, reltuple, sentence_reltuples):
         source = sentence_reltuples.arg_to_string(reltuple[0])
         target = sentence_reltuples.arg_to_string(reltuple[2])
-        label = sentence_reltuples.relation_to_string(reltuple[1])
+        relation = sentence_reltuples.relation_to_string(reltuple[1])
         sentence_text = sentence_reltuples.sentence.getText()
         self._add_node(source, sentence_text)
         self._add_node(target, sentence_text)
-        if not source in self._graph or not target in self._graph:
+        self._add_edge(source, target, relation, sentence_text)
+
+    def _add_edge(self, source, target, label, description):
+        if source not in self._graph or target not in self._graph:
             return
         if not self._graph.has_edge(source, target):
             self._graph.add_edge(
-                source, target, label=label, description=sentence_text, weight=1
+                source, target, label=label, description=description, weight=1
             )
             return
         # this edge already exists
@@ -188,29 +191,29 @@ class RelGraph:
             self._graph[source][target]["label"] = "{} | {}".format(
                 self._graph[source][target]["label"], label
             )
-        if sentence_text not in self._graph[source][target]["description"].split(" | "):
+        if description not in self._graph[source][target]["description"].split(" | "):
             self._graph[source][target]["description"] = "{} | {}".format(
-                self._graph[source][target]["description"], sentence_text
+                self._graph[source][target]["description"], description
             )
         self._graph[source][target]["weight"] += 1
 
-    def _add_node(self, node_name, sentence_text):
-        node_name = self._clean_node(node_name)
-        if set(node_name.split()).issubset(self._stopwords) or (
-            len(node_name) == 1 and node_name.isalpha()
+    def _add_node(self, name, description):
+        name = self._clean_node(name)
+        if set(name.split()).issubset(self._stopwords) or (
+            len(name) == 1 and name.isalpha()
         ):
             return
-        if node_name not in self._graph:
-            self._graph.add_node(node_name, description=sentence_text, weight=1)
+        if name not in self._graph:
+            self._graph.add_node(name, description=description, weight=1)
             return
         # this node already exists
-        if sentence_text not in self._graph.nodes[node_name]["description"].split(
+        if description not in self._graph.nodes[name]["description"].split(
             " | "
         ):
-            self._graph.nodes[node_name]["description"] = "{} | {}".format(
-                self._graph.nodes[node_name]["description"], sentence_text
+            self._graph.nodes[name]["description"] = "{} | {}".format(
+                self._graph.nodes[name]["description"], description
             )
-        self._graph.nodes[node_name]["weight"] += 1
+        self._graph.nodes[name]["weight"] += 1
 
     def save(self, path):
         stream_buffer = io.BytesIO()
