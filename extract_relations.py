@@ -27,9 +27,9 @@ class SentenceReltuples:
         return res
 
     def to_string_tuple(self, reltuple):
-        left = self._subtree_to_string(reltuple[0])
-        center = self._relation_to_string(reltuple[1])
-        right = self._subtree_to_string(reltuple[2])
+        left = self.arg_to_string(reltuple[0])
+        center = self.relation_to_string(reltuple[1])
+        right = self.arg_to_string(reltuple[2])
         return (left, center, right)
 
     def _extract_reltuples(self):
@@ -52,7 +52,7 @@ class SentenceReltuples:
             for obl in verb_oblique_nominals:
                 self.reltuples.append((subj, verb, obl))
 
-    def _relation_to_string(self, word):
+    def relation_to_string(self, word):
         prefix = self._get_relation_prefix(word)
         postfix = self._get_relation_postfix(word)
         return prefix + word.form + postfix
@@ -70,10 +70,10 @@ class SentenceReltuples:
                 prefix += child.form + " "
         parent = self.sentence.words[word.head]
         if word.deprel == "xcomp":
-            prefix = self._relation_to_string(parent) + " " + prefix
+            prefix = self.relation_to_string(parent) + " " + prefix
         if self._is_conjunct(word) and parent.deprel == "xcomp":
             grandparent = self.sentence.words[parent.head]
-            prefix = self._relation_to_string(grandparent) + " " + prefix
+            prefix = self.relation_to_string(grandparent) + " " + prefix
         return prefix
 
     def _get_relation_postfix(self, word):
@@ -89,17 +89,17 @@ class SentenceReltuples:
                 postfix += " " + child.form
         return postfix
 
-    def _subtree_to_string(self, word):
+    def arg_to_string(self, word):
         strings = []
         if not list(word.children):
             return word.form
         for child_idx in (idx for idx in word.children if idx < word.id):
             child = self.sentence.words[child_idx]
-            strings.append(self._subtree_to_string(child))
+            strings.append(self.arg_to_string(child))
         strings.append(word.form)
         for child_idx in (idx for idx in word.children if idx > word.id):
             child = self.sentence.words[child_idx]
-            strings.append(self._subtree_to_string(child))
+            strings.append(self.arg_to_string(child))
         return " ".join(strings)
 
     def _get_subjects(self, word):
@@ -166,15 +166,16 @@ class RelGraph:
             graph.add_sentence_reltuples(sentence_reltuple)
 
     def add_sentence_reltuples(self, sentence_reltuples):
-        sentence_text = sentence_reltuples.sentence.getText()
-        for reltuple in sentence_reltuples.string_tuples:
-            node_str1 = self._clean_node(reltuple[0])
-            node_str2 = self._clean_node(reltuple[2])
-            self._add_node(node_str1, sentence_text)
-            self._add_node(node_str2, sentence_text)
-            self._add_edge(node_str1, node_str2, reltuple[1], sentence_text)
+        for reltuple in sentence_reltuples.reltuples:
+            self._add_edge(reltuple, sentence_reltuples)
 
-    def _add_edge(self, source, target, label, sentence_text):
+    def _add_edge(self, reltuple, sentence_reltuples):
+        source = sentence_reltuples.arg_to_string(reltuple[0])
+        target = sentence_reltuples.arg_to_string(reltuple[2])
+        label = sentence_reltuples.relation_to_string(reltuple[1])
+        sentence_text = sentence_reltuples.sentence.getText()
+        self._add_node(source, sentence_text)
+        self._add_node(target, sentence_text)
         if not source in self._graph or not target in self._graph:
             return
         if not self._graph.has_edge(source, target):
@@ -194,6 +195,7 @@ class RelGraph:
         self._graph[source][target]["weight"] += 1
 
     def _add_node(self, node_name, sentence_text):
+        node_name = self._clean_node(node_name)
         if set(node_name.split()).issubset(self._stopwords) or (
             len(node_name) == 1 and node_name.isalpha()
         ):
