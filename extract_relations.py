@@ -176,9 +176,6 @@ class RelGraph:
         target = sentence_reltuples.arg_to_string(reltuple[2])
         relation = sentence_reltuples.relation_to_string(reltuple[1])
         sentence_text = sentence_reltuples.sentence.getText()
-        source = self._clean_node(source)
-        target = self._clean_node(target)
-        relation = self._clean_node(relation)
         self._add_node(source, sentence_text)
         self._add_node(target, sentence_text)
         self._add_edge(source, target, relation, sentence_text)
@@ -187,6 +184,9 @@ class RelGraph:
             self._add_syntax_tree(reltuple[2], sentence_reltuples)
 
     def _add_edge(self, source, target, label, description):
+        source = self._clean_string(source)
+        target = self._clean_string(target)
+        label = self._clean_string(label)
         if source not in self._graph or target not in self._graph:
             return
         if not self._graph.has_edge(source, target):
@@ -206,6 +206,7 @@ class RelGraph:
         self._graph[source][target]["weight"] += 1
 
     def _add_node(self, name, description):
+        name = self._clean_string(name)
         if set(name.split()).issubset(self._stopwords) or (
             len(name) == 1 and name.isalpha()
         ):
@@ -232,7 +233,6 @@ class RelGraph:
 
     def _add_syntax_tree(self, rel_arg, sentence_reltuples):
         full_arg_string = sentence_reltuples.arg_to_string(rel_arg)
-        full_arg_string = self._clean_node(full_arg_string)
         self._add_word(rel_arg, sentence_reltuples)
         self._add_edge(
             rel_arg.lemma,
@@ -251,7 +251,7 @@ class RelGraph:
             child = sentence_reltuples.sentence.words[child_idx]
             self._add_word(child, sentence_reltuples)
 
-    def _clean_node(self, node_string):
+    def _clean_string(self, node_string):
         res = (
             "".join(
                 char
