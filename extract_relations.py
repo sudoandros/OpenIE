@@ -176,6 +176,9 @@ class RelGraph:
         target = sentence_reltuples.arg_to_string(reltuple[2])
         relation = sentence_reltuples.relation_to_string(reltuple[1])
         sentence_text = sentence_reltuples.sentence.getText()
+        source = self._clean_node(source)
+        target = self._clean_node(target)
+        relation = self._clean_node(relation)
         self._add_node(source, sentence_text)
         self._add_node(target, sentence_text)
         self._add_edge(source, target, relation, sentence_text)
@@ -203,7 +206,6 @@ class RelGraph:
         self._graph[source][target]["weight"] += 1
 
     def _add_node(self, name, description):
-        name = self._clean_node(name)
         if set(name.split()).issubset(self._stopwords) or (
             len(name) == 1 and name.isalpha()
         ):
@@ -243,10 +245,7 @@ class RelGraph:
         self._add_node(word.lemma, sentence_reltuples.sentence.getText())
         parent = sentence_reltuples.sentence.words[word.head]
         self._add_edge(
-            word.lemma,
-            parent.lemma,
-            word.deprel,
-            sentence_reltuples.sentence.getText(),
+            word.lemma, parent.lemma, word.deprel, sentence_reltuples.sentence.getText()
         )
         for child_idx in word.children:
             child = sentence_reltuples.sentence.words[child_idx]
