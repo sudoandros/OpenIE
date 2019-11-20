@@ -259,7 +259,7 @@ class RelGraph:
                 if char.isalnum() or char.isspace() or char in ",.;-—/:%"
             )
             .lower()
-            .strip(" .,:;")
+            .strip(" .,:;-")
         )
         return res
 
