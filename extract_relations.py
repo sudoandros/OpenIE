@@ -28,7 +28,7 @@ class SentenceReltuples:
 
     def to_string_tuple(self, reltuple):
         left = self.arg_to_string(reltuple[0])
-        center = self.relation_to_string(reltuple[1])
+        center = self.relation_to_string(reltuple[1], reltuple[2])
         right = self.arg_to_string(reltuple[2])
         return (left, center, right)
 
@@ -52,41 +52,44 @@ class SentenceReltuples:
             for obl in verb_oblique_nominals:
                 self.reltuples.append((subj, verb, obl))
 
-    def relation_to_string(self, word):
-        prefix = self._get_relation_prefix(word)
-        postfix = self._get_relation_postfix(word)
-        return prefix + word.form + postfix
+    def relation_to_string(self, relation, right_arg):
+        prefix = self._get_relation_prefix(relation, right_arg)
+        postfix = self._get_relation_postfix(relation, right_arg)
+        return prefix + relation.form + postfix
 
-    def _get_relation_prefix(self, word):
+    def _get_relation_prefix(self, relation, right_arg):
         prefix = ""
-        for child_idx in word.children:
+        for child_idx in relation.children:
             child = self.sentence.words[child_idx]
             if (
                 child.deprel == "case"
                 or child.deprel == "aux"
                 or child.deprel == "aux:pass"
                 or child.upostag == "PART"
-            ) and child.id < word.id:
+            ) and child.id < relation.id:
                 prefix += child.form + " "
-        parent = self.sentence.words[word.head]
-        if word.deprel == "xcomp":
-            prefix = self.relation_to_string(parent) + " " + prefix
-        if self._is_conjunct(word) and parent.deprel == "xcomp":
+        parent = self.sentence.words[relation.head]
+        if relation.deprel == "xcomp":
+            prefix = self.relation_to_string(parent, right_arg) + " " + prefix
+        if self._is_conjunct(relation) and parent.deprel == "xcomp":
             grandparent = self.sentence.words[parent.head]
-            prefix = self.relation_to_string(grandparent) + " " + prefix
+            prefix = self.relation_to_string(grandparent, right_arg) + " " + prefix
         return prefix
 
-    def _get_relation_postfix(self, word):
+    def _get_relation_postfix(self, relation, right_arg):
         postfix = ""
-        for child_idx in word.children:
+        for child_idx in relation.children:
             child = self.sentence.words[child_idx]
             if (
                 child.deprel == "case"
                 or child.deprel == "aux"
                 or child.deprel == "aux:pass"
                 or child.upostag == "PART"
-            ) and child.id > word.id:
+            ) and child.id > relation.id:
                 postfix += " " + child.form
+        case = self._get_first_case(right_arg)
+        if case is not None:
+            postfix += " " + case.form
         return postfix
 
     def arg_to_string(self, word):
@@ -141,6 +144,17 @@ class SentenceReltuples:
             obl_list += self._get_oblique_nominals(grandparent)
         return obl_list
 
+    def _get_first_case(self, word):
+        if len(word.children) > 0:
+            child_idx = word.children[0]
+            child = self.sentence.words[child_idx]
+            if child.deprel == "case":
+                return child
+            else:
+                return self._get_first_case(child)
+        else:
+            return None
+
     def _is_subject(self, word):
         return word.deprel in ["nsubj", "nsubj:pass"]
 
@@ -174,7 +188,7 @@ class RelGraph:
     def _add_reltuple(self, reltuple, sentence_reltuples, include_syntax=False):
         source = sentence_reltuples.arg_to_string(reltuple[0])
         target = sentence_reltuples.arg_to_string(reltuple[2])
-        relation = sentence_reltuples.relation_to_string(reltuple[1])
+        relation = sentence_reltuples.relation_to_string(reltuple[1], reltuple[2])
         sentence_text = sentence_reltuples.sentence.getText()
         self._add_node(source, sentence_text)
         self._add_node(target, sentence_text)
