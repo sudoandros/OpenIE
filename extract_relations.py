@@ -27,9 +27,9 @@ class SentenceReltuples:
         return res
 
     def to_string_tuple(self, reltuple):
-        left = self.arg_to_string(reltuple[0])
+        left = self.left_arg_to_string(reltuple[0])
         center = self.relation_to_string(reltuple[1], reltuple[2])
-        right = self.arg_to_string(reltuple[2])
+        right = self.right_arg_to_string(reltuple[2])
         return (left, center, right)
 
     def _extract_reltuples(self):
