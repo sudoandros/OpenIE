@@ -52,12 +52,12 @@ class SentenceReltuples:
             for obl in verb_oblique_nominals:
                 self.reltuples.append((subj, verb, obl))
 
-    def relation_to_string(self, relation, right_arg):
-        prefix = self._get_relation_prefix(relation, right_arg)
+    def relation_to_string(self, relation, right_arg=None):
+        prefix = self._get_relation_prefix(relation)
         postfix = self._get_relation_postfix(relation, right_arg)
         return prefix + relation.form + postfix
 
-    def _get_relation_prefix(self, relation, right_arg):
+    def _get_relation_prefix(self, relation):
         prefix = ""
         for child_idx in relation.children:
             child = self.sentence.words[child_idx]
@@ -70,13 +70,13 @@ class SentenceReltuples:
                 prefix += child.form + " "
         parent = self.sentence.words[relation.head]
         if relation.deprel == "xcomp":
-            prefix = self.relation_to_string(parent, right_arg) + " " + prefix
+            prefix = self.relation_to_string(parent) + " " + prefix
         if self._is_conjunct(relation) and parent.deprel == "xcomp":
             grandparent = self.sentence.words[parent.head]
-            prefix = self.relation_to_string(grandparent, right_arg) + " " + prefix
+            prefix = self.relation_to_string(grandparent) + " " + prefix
         return prefix
 
-    def _get_relation_postfix(self, relation, right_arg):
+    def _get_relation_postfix(self, relation, right_arg=None):
         postfix = ""
         for child_idx in relation.children:
             child = self.sentence.words[child_idx]
@@ -87,6 +87,7 @@ class SentenceReltuples:
                 or child.upostag == "PART"
             ) and child.id > relation.id:
                 postfix += " " + child.form
+        if right_arg:
         case = self._get_first_case(right_arg)
         if case is not None:
             postfix += " " + case.form
