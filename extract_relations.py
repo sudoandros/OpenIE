@@ -93,18 +93,28 @@ class SentenceReltuples:
             postfix += " " + case.form
         return postfix
 
-    def arg_to_string(self, word):
+    def left_arg_to_string(self, word):
+        return self._arg_to_string(word)
+
+    def right_arg_to_string(self, word):
+        first_case = self._get_first_case(word)
+        return self._arg_to_string(word, exclude=first_case)
+
+    def _arg_to_string(self, word, exclude=None):
         strings = []
         if not list(word.children):
+            if exclude and exclude.id == word.id:
+                return ""
+            else:
             return word.form
         for child_idx in (idx for idx in word.children if idx < word.id):
             child = self.sentence.words[child_idx]
-            strings.append(self.arg_to_string(child))
+            strings.append(self._arg_to_string(child, exclude=exclude))
         strings.append(word.form)
         for child_idx in (idx for idx in word.children if idx > word.id):
             child = self.sentence.words[child_idx]
-            strings.append(self.arg_to_string(child))
-        return " ".join(strings)
+            strings.append(self._arg_to_string(child, exclude=exclude))
+        return " ".join(strings).strip()
 
     def _get_subjects(self, word):
         subj_list = []
@@ -187,8 +197,8 @@ class RelGraph:
             )
 
     def _add_reltuple(self, reltuple, sentence_reltuples, include_syntax=False):
-        source = sentence_reltuples.arg_to_string(reltuple[0])
-        target = sentence_reltuples.arg_to_string(reltuple[2])
+        source = sentence_reltuples.left_arg_to_string(reltuple[0])
+        target = sentence_reltuples.right_arg_to_string(reltuple[2])
         relation = sentence_reltuples.relation_to_string(reltuple[1], reltuple[2])
         sentence_text = sentence_reltuples.sentence.getText()
         self._add_node(source, sentence_text)
