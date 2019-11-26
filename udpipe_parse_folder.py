@@ -39,8 +39,17 @@ def get_text_from_hdr(filepath):
 
 def get_text_from_htm(filepath):
     with open(filepath, mode="r", encoding="cp1251") as file:
-        match = re.search("</NOMORPH>.*</BODY>", file.read(), flags=re.DOTALL)
-    res = " ".join(match.group(0).split())
+        file_content = file.read()
+        title_match = re.search(
+            "<CIR_HDR><H1><CENTER>.*</CENTER></H1></CIR_HDR>",
+            file_content,
+            flags=re.DOTALL,
+        )
+        text_match = re.search("</CIR_HDR>.*</BODY>", file_content, flags=re.DOTALL)
+    res = ""
+    if title_match:
+        res += title_match.group(0) + ". "
+    res += " ".join(text_match.group(0).split())
     return res
 
 
