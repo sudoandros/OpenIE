@@ -28,7 +28,7 @@ class SentenceReltuples:
 
     def to_string_tuple(self, reltuple):
         left = self.left_arg_to_string(reltuple[0])
-        center = self.relation_to_string(reltuple[1], reltuple[2])
+        center = self.relation_to_string(reltuple[1], right_arg=reltuple[2])
         right = self.right_arg_to_string(reltuple[2])
         return (left, center, right)
 
@@ -93,28 +93,35 @@ class SentenceReltuples:
             postfix += " " + case.form
         return postfix
 
-    def left_arg_to_string(self, word):
-        return self._arg_to_string(word)
+    def left_arg_to_string(self, word, lemmatized=False):
+        words_ids = self._get_arg_ids(word)
+        if lemmatized:
+            return " ".join(self.sentence.words[id_].lemma for id_ in words_ids)
+        else:
+            return " ".join(self.sentence.words[id_].form for id_ in words_ids)
 
-    def right_arg_to_string(self, word):
+    def right_arg_to_string(self, word, lemmatized=False):
         first_case = self._get_first_case(word)
-        return self._arg_to_string(word, exclude=first_case)
+        words_ids = self._get_arg_ids(word, exclude=first_case)
+        if lemmatized:
+            return " ".join(self.sentence.words[id_].lemma for id_ in words_ids)
+        else:
+            return " ".join(self.sentence.words[id_].form for id_ in words_ids)
 
-    def _arg_to_string(self, word, exclude=None):
-        strings = []
+    def _get_arg_ids(self, word, exclude=None, lemmatized=False):
         if not list(word.children):
-            if exclude and exclude.id == word.id:
-                return ""
-            else:
-            return word.form
+            return [word.id]
+        res_ids = []
         for child_idx in (idx for idx in word.children if idx < word.id):
             child = self.sentence.words[child_idx]
-            strings.append(self._arg_to_string(child, exclude=exclude))
-        strings.append(word.form)
+            if exclude and exclude.id == child.id:
+                continue
+            res_ids.extend(self._get_arg_ids(child, exclude=exclude))
+        res_ids.append(word.id)
         for child_idx in (idx for idx in word.children if idx > word.id):
             child = self.sentence.words[child_idx]
-            strings.append(self._arg_to_string(child, exclude=exclude))
-        return " ".join(strings).strip()
+            res_ids.extend(self._get_arg_ids(child, exclude=exclude))
+        return res_ids
 
     def _get_subjects(self, word):
         subj_list = []
