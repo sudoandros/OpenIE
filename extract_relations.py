@@ -36,6 +36,9 @@ class SentenceReltuples:
         verbs = [word for word in self.sentence.words if word.upostag == "VERB"]
         for verb in verbs:
             self._extract_verb_reltuples(verb)
+        copulas = [word for word in self.sentence.words if word.deprel == "cop"]
+        for copula in copulas:
+            self._extract_copula_reltuples(copula)
 
     def _extract_verb_reltuples(self, verb):
         for child_idx in verb.children:
@@ -47,6 +50,13 @@ class SentenceReltuples:
         for subj in subjects:
             for arg in right_args:
                 self.reltuples.append((subj, verb, arg))
+
+    def _extract_copula_reltuples(self, copula):
+        parent = self.sentence.words[copula.head]
+        right_arg = parent
+        subjects = self._get_subjects(parent)
+        for subj in subjects:
+            self.reltuples.append((subj, copula, right_arg))
 
     def relation_to_string(self, relation, right_arg=None):
         prefix = self._get_relation_prefix(relation)
@@ -97,10 +107,23 @@ class SentenceReltuples:
             return " ".join(self.sentence.words[id_].form for id_ in words_ids)
 
     def right_arg_to_string(self, word, lemmatized=False):
-        first_case = self._get_first_case(word)
         words_ids = self._get_arg_ids(word)
+        first_case = self._get_first_case(word)
         if first_case:
             words_ids.remove(first_case.id)
+        copula = self._get_copula(word)
+        for id_ in copula:
+            words_ids.remove(id_)
+        # remove subject subtree
+        for id_ in words_ids.copy():
+            word_to_check = self.sentence.words[id_]
+            if word_to_check.head == word.id and self._is_subject(word_to_check):
+                subtree = self._get_arg_ids(word_to_check)
+                for id_to_remove in subtree:
+                    try:
+                        words_ids.remove(id_to_remove)
+                    except ValueError:
+                        pass
         if lemmatized:
             return " ".join(self.sentence.words[id_].lemma for id_ in words_ids)
         else:
@@ -155,6 +178,18 @@ class SentenceReltuples:
                 return child
             else:
                 return self._get_first_case(child)
+
+    def _get_copula(self, word):
+        part_ids = []
+        for child_idx in word.children:
+            child = self.sentence.words[child_idx]
+            if child.deprel == "cop":
+                return part_ids + [child.id]
+            if child.upostag == "PART":
+                part_ids.append(child.id)
+            else:
+                part_ids = []
+        return []
 
     def _is_subject(self, word):
         return word.deprel in ["nsubj", "nsubj:pass"]
