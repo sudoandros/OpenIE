@@ -205,13 +205,19 @@ class RelGraph:
             )
 
     def _add_reltuple(self, reltuple, sentence_reltuples, include_syntax=False):
-        source = sentence_reltuples.left_arg_to_string(reltuple[0])
-        target = sentence_reltuples.right_arg_to_string(reltuple[2])
+        source_name = sentence_reltuples.left_arg_to_string(
+            reltuple[0], lemmatized=True
+        )
+        source_label = sentence_reltuples.left_arg_to_string(reltuple[0])
+        target_name = sentence_reltuples.right_arg_to_string(
+            reltuple[2], lemmatized=True
+        )
+        target_label = sentence_reltuples.right_arg_to_string(reltuple[2])
         relation = sentence_reltuples.relation_to_string(reltuple[1], reltuple[2])
         sentence_text = sentence_reltuples.sentence.getText()
-        self._add_node(source, sentence_text)
-        self._add_node(target, sentence_text)
-        self._add_edge(source, target, relation, sentence_text)
+        self._add_node(source_name, sentence_text, label=source_label)
+        self._add_node(target_name, sentence_text, label=target_label)
+        self._add_edge(source_name, target_name, relation, sentence_text)
         if include_syntax:
             self._add_syntax_tree(reltuple[0], sentence_reltuples)
             self._add_syntax_tree(reltuple[2], sentence_reltuples)
@@ -238,14 +244,18 @@ class RelGraph:
             )
         self._graph[source][target]["weight"] += 1
 
-    def _add_node(self, name, description):
+    def _add_node(self, name, description, label=None):
         name = self._clean_string(name)
+        if label:
+            label = self._clean_string(label)
+        else:
+            label = name
         if set(name.split()).issubset(self._stopwords) or (
             len(name) == 1 and name.isalpha()
         ):
             return
         if name not in self._graph:
-            self._graph.add_node(name, description=description, weight=1)
+            self._graph.add_node(name, label=label, description=description, weight=1)
             return
         # this node already exists
         if description not in self._graph.nodes[name]["description"].split(" | "):
