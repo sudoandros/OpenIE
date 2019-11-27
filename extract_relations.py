@@ -42,9 +42,9 @@ class SentenceReltuples:
             child = self.sentence.words[child_idx]
             if child.deprel == "xcomp":
                 return
-        verb_subjects = self._get_subjects(verb)
+        subjects = self._get_subjects(verb)
         right_args = self._get_right_args(verb)
-        for subj in verb_subjects:
+        for subj in subjects:
             for arg in right_args:
                 self.reltuples.append((subj, verb, arg))
 
@@ -98,25 +98,25 @@ class SentenceReltuples:
 
     def right_arg_to_string(self, word, lemmatized=False):
         first_case = self._get_first_case(word)
-        words_ids = self._get_arg_ids(word, exclude=first_case)
+        words_ids = self._get_arg_ids(word)
+        if first_case:
+            words_ids.remove(first_case.id)
         if lemmatized:
             return " ".join(self.sentence.words[id_].lemma for id_ in words_ids)
         else:
             return " ".join(self.sentence.words[id_].form for id_ in words_ids)
 
-    def _get_arg_ids(self, word, exclude=None, lemmatized=False):
+    def _get_arg_ids(self, word):
         if not list(word.children):
             return [word.id]
         res_ids = []
         for child_idx in (idx for idx in word.children if idx < word.id):
             child = self.sentence.words[child_idx]
-            if exclude and exclude.id == child.id:
-                continue
-            res_ids.extend(self._get_arg_ids(child, exclude=exclude))
+            res_ids.extend(self._get_arg_ids(child))
         res_ids.append(word.id)
         for child_idx in (idx for idx in word.children if idx > word.id):
             child = self.sentence.words[child_idx]
-            res_ids.extend(self._get_arg_ids(child, exclude=exclude))
+            res_ids.extend(self._get_arg_ids(child))
         return res_ids
 
     def _get_subjects(self, word):
