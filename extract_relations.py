@@ -163,15 +163,16 @@ class SentenceReltuples:
         return obl_list
 
     def _get_first_case(self, word):
-        if len(word.children) > 0:
+        if len(word.children) == 0:  # no children
+            return None
             child_idx = word.children[0]
+        if child_idx > word.id:  # there are children only after the word
+            return None
             child = self.sentence.words[child_idx]
             if child.deprel == "case":
                 return child
             else:
                 return self._get_first_case(child)
-        else:
-            return None
 
     def _is_subject(self, word):
         return word.deprel in ["nsubj", "nsubj:pass"]
