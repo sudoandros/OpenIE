@@ -43,14 +43,10 @@ class SentenceReltuples:
             if child.deprel == "xcomp":
                 return
         verb_subjects = self._get_subjects(verb)
-        verb_objects = self._get_objects(verb)
-        verb_oblique_nominals = self._get_oblique_nominals(verb)
+        right_args = self._get_right_args(verb)
         for subj in verb_subjects:
-            for obj in verb_objects:
-                self.reltuples.append((subj, verb, obj))
-        for subj in verb_subjects:
-            for obl in verb_oblique_nominals:
-                self.reltuples.append((subj, verb, obl))
+            for arg in right_args:
+                self.reltuples.append((subj, verb, arg))
 
     def relation_to_string(self, relation, right_arg=None):
         prefix = self._get_relation_prefix(relation)
@@ -134,33 +130,19 @@ class SentenceReltuples:
             subj_list = self._get_subjects(parent)
         return subj_list
 
-    def _get_objects(self, word):
-        obj_list = []
+    def _get_right_args(self, word):
+        args_list = []
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
-            if self._is_object(child):
-                obj_list.append(child)
+            if self._is_right_arg(child):
+                args_list.append(child)
         parent = self.sentence.words[word.head]
         if word.deprel == "xcomp":
-            obj_list += self._get_objects(parent)
+            args_list += self._get_right_args(parent)
         if self._is_conjunct(word) and parent.deprel == "xcomp":
             grandparent = self.sentence.words[parent.head]
-            obj_list += self._get_objects(grandparent)
-        return obj_list
-
-    def _get_oblique_nominals(self, word):
-        obl_list = []
-        for child_idx in word.children:
-            child = self.sentence.words[child_idx]
-            if self._is_oblique_nominal(child):
-                obl_list.append(child)
-        parent = self.sentence.words[word.head]
-        if word.deprel == "xcomp":
-            obl_list += self._get_oblique_nominals(parent)
-        if self._is_conjunct(word) and parent.deprel == "xcomp":
-            grandparent = self.sentence.words[parent.head]
-            obl_list += self._get_oblique_nominals(grandparent)
-        return obl_list
+            args_list += self._get_right_args(grandparent)
+        return args_list
 
     def _get_first_case(self, word):
         if len(word.children) == 0:  # no children
@@ -177,11 +159,8 @@ class SentenceReltuples:
     def _is_subject(self, word):
         return word.deprel in ["nsubj", "nsubj:pass"]
 
-    def _is_object(self, word):
-        return word.deprel in ["obj", "iobj"]
-
-    def _is_oblique_nominal(self, word):
-        return word.deprel in ["obl", "obl:agent", "iobl"]
+    def _is_right_arg(self, word):
+        return word.deprel in ["obj", "iobj", "obl", "obl:agent", "iobl"]
 
     def _is_conjunct(self, word):
         return word.deprel == "conj"
