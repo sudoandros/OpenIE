@@ -27,9 +27,9 @@ class SentenceReltuples:
         return res
 
     def to_string_tuple(self, reltuple):
-        left = self.left_arg_to_string(reltuple[0])
-        center = self.relation_to_string(reltuple[1], right_arg=reltuple[2])
-        right = self.right_arg_to_string(reltuple[2])
+        left = self.arg_to_string(reltuple[0])
+        center = self.relation_to_string(reltuple[1])
+        right = self.arg_to_string(reltuple[2])
         return (left, center, right)
 
     def _extract_reltuples(self):
@@ -49,22 +49,28 @@ class SentenceReltuples:
         right_args = self._get_right_args(verb)
         for subj in subjects:
             for arg in right_args:
-                self.reltuples.append((subj, verb, arg))
+                relation = self._get_relation(verb, right_arg=arg)
+                self.reltuples.append((subj, relation, arg))
 
     def _extract_copula_reltuples(self, copula):
+        right_arg = self._get_right_args(copula)[0]
         parent = self.sentence.words[copula.head]
-        right_arg = parent
         subjects = self._get_subjects(parent)
+        relation = self._get_copula(parent)
         for subj in subjects:
-            self.reltuples.append((subj, copula, right_arg))
+            self.reltuples.append((subj, relation, right_arg))
 
-    def relation_to_string(self, relation, right_arg=None):
-        prefix = self._get_relation_prefix(relation)
-        postfix = self._get_relation_postfix(relation, right_arg)
-        return prefix + relation.form + postfix
+    def _get_relation(self, word, right_arg=None):
+        prefix = self._get_relation_prefix(word)
+        postfix = self._get_relation_postfix(word, right_arg=right_arg)
+        relation = prefix + [word.id] + postfix
+        return relation
+
+    def relation_to_string(self, relation):
+        return " ".join(self.sentence.words[id_].form for id_ in relation)
 
     def _get_relation_prefix(self, relation):
-        prefix = ""
+        prefix = []
         for child_idx in relation.children:
             child = self.sentence.words[child_idx]
             if (
@@ -73,17 +79,17 @@ class SentenceReltuples:
                 or child.deprel == "aux:pass"
                 or child.upostag == "PART"
             ) and child.id < relation.id:
-                prefix += child.form + " "
+                prefix.append(child.id)
         parent = self.sentence.words[relation.head]
         if relation.deprel == "xcomp":
-            prefix = self.relation_to_string(parent) + " " + prefix
+            prefix = self._get_relation(parent) + prefix
         if self._is_conjunct(relation) and parent.deprel == "xcomp":
             grandparent = self.sentence.words[parent.head]
-            prefix = self.relation_to_string(grandparent) + " " + prefix
+            prefix = self._get_relation(grandparent) + prefix
         return prefix
 
     def _get_relation_postfix(self, relation, right_arg=None):
-        postfix = ""
+        postfix = []
         for child_idx in relation.children:
             child = self.sentence.words[child_idx]
             if (
@@ -92,54 +98,53 @@ class SentenceReltuples:
                 or child.deprel == "aux:pass"
                 or child.upostag == "PART"
             ) and child.id > relation.id:
-                postfix += " " + child.form
+                postfix.append(child.id)
         if right_arg:
-            case = self._get_first_case(right_arg)
-            if case is not None:
-                postfix += " " + case.form
+            case_id = self._get_first_case(right_arg)
+            if case_id is not None:
+                postfix.append(case_id)
+                right_arg.remove(case_id)
         return postfix
 
-    def left_arg_to_string(self, word, lemmatized=False):
-        words_ids = self._get_arg_ids(word)
+    def arg_to_string(self, words_ids, lemmatized=False):
         if lemmatized:
             return " ".join(self.sentence.words[id_].lemma for id_ in words_ids)
         else:
             return " ".join(self.sentence.words[id_].form for id_ in words_ids)
 
-    def right_arg_to_string(self, word, lemmatized=False):
-        words_ids = self._get_arg_ids(word)
-        first_case = self._get_first_case(word)
-        if first_case:
-            words_ids.remove(first_case.id)
-        copula = self._get_copula(word)
-        for id_ in copula:
+    def _get_right_args(self, word):
+        if word.deprel == "cop":
+            args_list = self._get_copula_right_args(word)
+        else:
+            args_list = self._get_verb_right_args(word)
+        return args_list
+
+    def _get_copula_right_args(self, word):
+        parent = self.sentence.words[word.head]
+        words_ids = self._get_subtree(parent)
+        copula_words_ids = self._get_copula(parent)
+        for id_ in copula_words_ids:
             words_ids.remove(id_)
         # remove subject subtree
         for id_ in words_ids.copy():
             word_to_check = self.sentence.words[id_]
             if word_to_check.head == word.id and self._is_subject(word_to_check):
-                subtree = self._get_arg_ids(word_to_check)
+                subtree = self._get_subtree(word_to_check)
                 for id_to_remove in subtree:
-                    try:
-                        words_ids.remove(id_to_remove)
-                    except ValueError:
-                        pass
-        if lemmatized:
-            return " ".join(self.sentence.words[id_].lemma for id_ in words_ids)
-        else:
-            return " ".join(self.sentence.words[id_].form for id_ in words_ids)
+                    words_ids.remove(id_to_remove)
+        return [words_ids]
 
-    def _get_arg_ids(self, word):
+    def _get_subtree(self, word):
         if not list(word.children):
             return [word.id]
         res_ids = []
         for child_idx in (idx for idx in word.children if idx < word.id):
             child = self.sentence.words[child_idx]
-            res_ids.extend(self._get_arg_ids(child))
+            res_ids.extend(self._get_subtree(child))
         res_ids.append(word.id)
         for child_idx in (idx for idx in word.children if idx > word.id):
             child = self.sentence.words[child_idx]
-            res_ids.extend(self._get_arg_ids(child))
+            res_ids.extend(self._get_subtree(child))
         return res_ids
 
     def _get_subjects(self, word):
@@ -147,37 +152,36 @@ class SentenceReltuples:
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
             if self._is_subject(child):
-                subj_list.append(child)
+                subj_list.append(self._get_subtree(child))
         if not subj_list and (word.deprel == "conj" or word.deprel == "xcomp"):
             parent = self.sentence.words[word.head]
             subj_list = self._get_subjects(parent)
         return subj_list
 
-    def _get_right_args(self, word):
+    def _get_verb_right_args(self, word):
         args_list = []
         for child_idx in word.children:
             child = self.sentence.words[child_idx]
             if self._is_right_arg(child):
-                args_list.append(child)
+                args_list.append(self._get_subtree(child))
         parent = self.sentence.words[word.head]
         if word.deprel == "xcomp":
-            args_list += self._get_right_args(parent)
+            args_list += self._get_verb_right_args(parent)
         if self._is_conjunct(word) and parent.deprel == "xcomp":
             grandparent = self.sentence.words[parent.head]
-            args_list += self._get_right_args(grandparent)
+            args_list += self._get_verb_right_args(grandparent)
         return args_list
 
-    def _get_first_case(self, word):
-        if len(word.children) == 0:  # no children
-            return None
-        child_idx = word.children[0]
-        if child_idx > word.id:  # there are children only after the word
-            return None
-        child = self.sentence.words[child_idx]
-        if child.deprel == "case":
-            return child
-        else:
-            return self._get_first_case(child)
+    def _get_first_case(self, words_ids):
+        for id_ in words_ids:
+            word = self.sentence.words[id_]
+            if word.head not in words_ids:
+                root = word
+        for id_ in words_ids:
+            word = self.sentence.words[id_]
+            if id_ < root.id and word.deprel == "case":
+                return id_
+        return None
 
     def _get_copula(self, word):
         part_ids = []
@@ -219,15 +223,11 @@ class RelGraph:
             )
 
     def _add_reltuple(self, reltuple, sentence_reltuples, include_syntax=False):
-        source_name = sentence_reltuples.left_arg_to_string(
-            reltuple[0], lemmatized=True
-        )
-        source_label = sentence_reltuples.left_arg_to_string(reltuple[0])
-        target_name = sentence_reltuples.right_arg_to_string(
-            reltuple[2], lemmatized=True
-        )
-        target_label = sentence_reltuples.right_arg_to_string(reltuple[2])
-        relation = sentence_reltuples.relation_to_string(reltuple[1], reltuple[2])
+        source_name = sentence_reltuples.arg_to_string(reltuple[0], lemmatized=True)
+        source_label = sentence_reltuples.arg_to_string(reltuple[0])
+        target_name = sentence_reltuples.arg_to_string(reltuple[2], lemmatized=True)
+        target_label = sentence_reltuples.arg_to_string(reltuple[2])
+        relation = sentence_reltuples.relation_to_string(reltuple[1])
         sentence_text = sentence_reltuples.sentence.getText()
         self._add_node(source_name, sentence_text, label=source_label)
         self._add_node(target_name, sentence_text, label=target_label)
