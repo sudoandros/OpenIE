@@ -94,9 +94,9 @@ class SentenceReltuples:
             ) and child.id > relation.id:
                 postfix += " " + child.form
         if right_arg:
-        case = self._get_first_case(right_arg)
-        if case is not None:
-            postfix += " " + case.form
+            case = self._get_first_case(right_arg)
+            if case is not None:
+                postfix += " " + case.form
         return postfix
 
     def left_arg_to_string(self, word, lemmatized=False):
@@ -170,14 +170,14 @@ class SentenceReltuples:
     def _get_first_case(self, word):
         if len(word.children) == 0:  # no children
             return None
-            child_idx = word.children[0]
+        child_idx = word.children[0]
         if child_idx > word.id:  # there are children only after the word
             return None
-            child = self.sentence.words[child_idx]
-            if child.deprel == "case":
-                return child
-            else:
-                return self._get_first_case(child)
+        child = self.sentence.words[child_idx]
+        if child.deprel == "case":
+            return child
+        else:
+            return self._get_first_case(child)
 
     def _get_copula(self, word):
         part_ids = []
