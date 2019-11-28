@@ -128,7 +128,10 @@ class SentenceReltuples:
         subjects = self._get_subjects(parent)
         for subj in subjects:
             for id_to_remove in subj:
-                words_ids.remove(id_to_remove)
+                try:
+                    words_ids.remove(id_to_remove)
+                except ValueError:
+                    continue
         return [words_ids]
 
     def _get_verb_right_args(self, word):
