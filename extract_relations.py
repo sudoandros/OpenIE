@@ -42,12 +42,11 @@ class SentenceReltuples:
             return " ".join(self.sentence.words[id_].form for id_ in words_ids)
 
     def _extract_reltuples(self):
-        verbs = [word for word in self.sentence.words if word.upostag == "VERB"]
-        for verb in verbs:
-            self._extract_verb_reltuples(verb)
-        copulas = [word for word in self.sentence.words if word.deprel == "cop"]
-        for copula in copulas:
-            self._extract_copula_reltuples(copula)
+        for word in self.sentence.words:
+            if word.deprel == "cop":
+                self._extract_copula_reltuples(word)
+            elif word.upostag == "VERB":
+                self._extract_verb_reltuples(word)
 
     def _extract_verb_reltuples(self, verb):
         for child_idx in verb.children:
@@ -65,7 +64,7 @@ class SentenceReltuples:
         right_arg = self._get_right_args(copula)[0]
         parent = self.sentence.words[copula.head]
         subjects = self._get_subjects(parent)
-        relation = self._get_copula(parent)
+        relation = self._get_copula(copula)
         for subj in subjects:
             self.reltuples.append((subj, relation, right_arg))
 
@@ -122,16 +121,14 @@ class SentenceReltuples:
     def _get_copula_right_args(self, word):
         parent = self.sentence.words[word.head]
         words_ids = self._get_subtree(parent)
-        copula_words_ids = self._get_copula(parent)
-        for id_ in copula_words_ids:
-            words_ids.remove(id_)
-        # remove subject subtree
-        for id_ in words_ids.copy():
-            word_to_check = self.sentence.words[id_]
-            if word_to_check.head == word.id and self._is_subject(word_to_check):
-                subtree = self._get_subtree(word_to_check)
-                for id_to_remove in subtree:
-                    words_ids.remove(id_to_remove)
+        copulas = self._get_all_copulas(parent)
+        for copula_words_ids in copulas:
+            for id_ in copula_words_ids:
+                words_ids.remove(id_)
+        subjects = self._get_subjects(parent)
+        for subj in subjects:
+            for id_to_remove in subj:
+                words_ids.remove(id_to_remove)
         return [words_ids]
 
     def _get_verb_right_args(self, word):
@@ -184,16 +181,25 @@ class SentenceReltuples:
         return None
 
     def _get_copula(self, word):
+        parent = self.sentence.words[word.head]
         part_ids = []
-        for child_idx in word.children:
-            child = self.sentence.words[child_idx]
-            if child.deprel == "cop":
-                return part_ids + [child.id]
-            if child.upostag == "PART":
-                part_ids.append(child.id)
+        for sibling_idx in parent.children:
+            sibling = self.sentence.words[sibling_idx]
+            if sibling.id == word.id:
+                return part_ids + [sibling.id]
+            if sibling.upostag == "PART":
+                part_ids.append(sibling.id)
             else:
                 part_ids = []
         return []
+
+    def _get_all_copulas(self, word):
+        res = []
+        for child_idx in word.children:
+            child = self.sentence.words[child_idx]
+            if child.deprel == "cop":
+                res.append(self._get_copula(child))
+        return res
 
     def _is_subject(self, word):
         return word.deprel in ["nsubj", "nsubj:pass"]
