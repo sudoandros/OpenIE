@@ -276,6 +276,10 @@ class RelGraph:
         for sentence_reltuple in reltuples_list:
             graph.add_sentence_reltuples(sentence_reltuple)
 
+    @property
+    def nodes_number(self):
+        return self._graph.number_of_nodes()
+
     def add_sentence_reltuples(self, sentence_reltuples, include_syntax=False):
         for reltuple in sentence_reltuples.reltuples:
             self._add_reltuple(
@@ -429,10 +433,17 @@ if __name__ == "__main__":
     parser.add_argument(
         "--add", help="Include additional relations", action="store_true"
     )
+    parser.add_argument(
+        "--nodes-limit",
+        help="Stop when after processing of another sentence these number "
+        "of nodes will be exceeded",
+        type=int,
+    )
     args = parser.parse_args()
     conllu_dir = Path(args.conllu_dir)
     save_dir = Path(args.save_dir)
     model = UDPipeModel(args.model_path)
+    nodes_limit = args.nodes_limit or float("inf")
     with open("stopwords.txt", mode="r", encoding="utf-8") as file:
         stopwords = list(file.read().split())
 
@@ -448,6 +459,10 @@ if __name__ == "__main__":
             reltuples = SentenceReltuples(s, additional_relations=args.add)
             output[s.getText()] = reltuples.string_tuples
             graph.add_sentence_reltuples(reltuples)
+            if graph.nodes_number > nodes_limit:
+                break
+        if graph.nodes_number > nodes_limit:
+            break
 
         output_path = save_dir / (path.stem + "_reltuples.json")
         with output_path.open("w", encoding="utf8") as file:
