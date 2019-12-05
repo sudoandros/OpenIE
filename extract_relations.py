@@ -292,9 +292,6 @@ class RelGraph:
         self._add_node(source_name, sentence_text, label=source_label)
         self._add_node(target_name, sentence_text, label=target_label)
         self._add_edge(source_name, target_name, relation, sentence_text)
-        if include_syntax:
-            self._add_syntax_tree(reltuple[0], sentence_reltuples)
-            self._add_syntax_tree(reltuple[2], sentence_reltuples)
 
     def _add_edge(self, source, target, label, description):
         source = self._clean_string(source)
@@ -303,9 +300,28 @@ class RelGraph:
         if source not in self._graph or target not in self._graph:
             return
         if not self._graph.has_edge(source, target):
-            self._graph.add_edge(
-                source, target, label=label, description=description, weight=1
-            )
+            if label == "выше":
+                self._graph.add_edge(
+                    source,
+                    target,
+                    label=label,
+                    description=description,
+                    weight=1,
+                    viz={"color": {"b": 255, "g": 0, "r": 0}},
+                )
+            elif label == "часть":
+                self._graph.add_edge(
+                    source,
+                    target,
+                    label=label,
+                    description=description,
+                    weight=1,
+                    viz={"color": {"b": 0, "g": 255, "r": 0}},
+                )
+            else:
+                self._graph.add_edge(
+                    source, target, label=label, description=description, weight=1
+                )
             return
         # this edge already exists
         if label not in self._graph[source][target]["label"].split(" | "):
@@ -347,26 +363,6 @@ class RelGraph:
         ET.register_namespace("", "http://www.gexf.net/1.1draft")
         xml_tree = ET.ElementTree(root_element)
         xml_tree.write(path, encoding="utf-8")
-
-    def _add_syntax_tree(self, rel_arg, sentence_reltuples):
-        full_arg_string = sentence_reltuples.arg_to_string(rel_arg)
-        self._add_word(rel_arg, sentence_reltuples)
-        self._add_edge(
-            rel_arg.lemma,
-            full_arg_string,
-            rel_arg.deprel,
-            sentence_reltuples.sentence.getText(),
-        )
-
-    def _add_word(self, word, sentence_reltuples):
-        self._add_node(word.lemma, sentence_reltuples.sentence.getText())
-        parent = sentence_reltuples.sentence.words[word.head]
-        self._add_edge(
-            word.lemma, parent.lemma, word.deprel, sentence_reltuples.sentence.getText()
-        )
-        for child_idx in word.children:
-            child = sentence_reltuples.sentence.words[child_idx]
-            self._add_word(child, sentence_reltuples)
 
     def _clean_string(self, node_string):
         res = (
@@ -449,9 +445,9 @@ if __name__ == "__main__":
             text = file.read()
         sentences = model.read(text, "conllu")
         for s in sentences:
-            reltuples = SentenceReltuples(s)
+            reltuples = SentenceReltuples(s, additional_relations=args.add)
             output[s.getText()] = reltuples.string_tuples
-            graph.add_sentence_reltuples(reltuples, include_syntax=args.include_syntax)
+            graph.add_sentence_reltuples(reltuples)
 
         output_path = save_dir / (path.stem + "_reltuples.json")
         with output_path.open("w", encoding="utf8") as file:
