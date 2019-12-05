@@ -422,6 +422,31 @@ class RelGraph:
                     attvalue_node.set("for", edge_attributes[attr_for])
 
 
+def build_dir_graph(conllu_dir, save_dir, udpipe_model, stopwords, nodes_limit):
+    graph = RelGraph(stopwords)
+    for path in tqdm(conllu_dir.iterdir()):
+        output = {}
+        if not (path.suffix == ".conllu"):
+            continue
+        with path.open("r", encoding="utf8") as file:
+            text = file.read()
+        sentences = model.read(text, "conllu")
+        for s in sentences:
+            reltuples = SentenceReltuples(s, additional_relations=args.add)
+            output[s.getText()] = reltuples.string_tuples
+            graph.add_sentence_reltuples(reltuples)
+            if graph.nodes_number > nodes_limit:
+                break
+        if graph.nodes_number > nodes_limit:
+            break
+
+        output_path = save_dir / (path.stem + "_reltuples.json")
+        with output_path.open("w", encoding="utf8") as file:
+            json.dump(output, file, ensure_ascii=False, indent=4)
+
+    graph.save(save_dir / "graph{}.gexf".format(conllu_dir.name))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("model_path", help="Path to the UDPipe model")
@@ -447,26 +472,5 @@ if __name__ == "__main__":
     with open("stopwords.txt", mode="r", encoding="utf-8") as file:
         stopwords = list(file.read().split())
 
-    graph = RelGraph(stopwords)
-    for path in tqdm(conllu_dir.iterdir()):
-        output = {}
-        if not (path.suffix == ".conllu"):
-            continue
-        with path.open("r", encoding="utf8") as file:
-            text = file.read()
-        sentences = model.read(text, "conllu")
-        for s in sentences:
-            reltuples = SentenceReltuples(s, additional_relations=args.add)
-            output[s.getText()] = reltuples.string_tuples
-            graph.add_sentence_reltuples(reltuples)
-            if graph.nodes_number > nodes_limit:
-                break
-        if graph.nodes_number > nodes_limit:
-            break
-
-        output_path = save_dir / (path.stem + "_reltuples.json")
-        with output_path.open("w", encoding="utf8") as file:
-            json.dump(output, file, ensure_ascii=False, indent=4)
-
-    graph.save(save_dir / "graph.gexf")
+    build_dir_graph(conllu_dir, save_dir, model, stopwords, nodes_limit)
 
