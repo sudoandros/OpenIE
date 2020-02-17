@@ -53,7 +53,17 @@ def get_text_from_htm(filepath):
     return res
 
 
-def parse(texts_dir, conllu_dir, udpipe_model, format_="sts"):
+def parse_text(text, udpipe_model):
+    sentences = udpipe_model.tokenize(text)
+    for s in sentences:
+        udpipe_model.tag(s)
+        udpipe_model.parse(s)
+
+    conllu = udpipe_model.write(sentences, "conllu")
+    return conllu
+
+
+def parse_dir(texts_dir, conllu_dir, udpipe_model, format_="sts"):
     tag_regex = re.compile("<[^>]+>")
     for text_path in tqdm(texts_dir.iterdir()):
         if text_path.suffix == ".{}".format(format_):
@@ -62,12 +72,7 @@ def parse(texts_dir, conllu_dir, udpipe_model, format_="sts"):
             continue
         text = tag_regex.sub("", text)
 
-        sentences = udpipe_model.tokenize(text)
-        for s in sentences:
-            udpipe_model.tag(s)
-            udpipe_model.parse(s)
-
-        conllu = udpipe_model.write(sentences, "conllu")
+        conllu = parse_text(text, udpipe_model)
         conllu_path = conllu_dir / (text_path.stem + "_udpipe.conllu")
         with conllu_path.open("w", encoding="utf8") as f:
             f.write(conllu)
@@ -93,4 +98,4 @@ if __name__ == "__main__":
     conllu_dir = Path(args.conllu_dir)
     udpipe_model = UDPipeModel(args.model_path)
 
-    parse(texts_dir, conllu_dir, udpipe_model, format_=args.format)
+    parse_dir(texts_dir, conllu_dir, udpipe_model, format_=args.format)
