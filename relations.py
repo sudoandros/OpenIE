@@ -422,32 +422,41 @@ class RelGraph:
                     attvalue_node.set("for", edge_attributes[attr_for])
 
 
-def build_dir_graph(
-    conllu_dir, save_dir, udpipe_model, stopwords, nodes_limit, additional_relations
+def get_text_relations(
+    conllu, udpipe_model, stopwords, additional_relations, nodes_limit
 ):
+    dict_out = {}
     graph = RelGraph(stopwords)
+    sentences = udpipe_model.read(conllu, "conllu")
 
-    for path in tqdm(conllu_dir.iterdir()):
-        dict_out = {}
-        if not (path.suffix == ".conllu"):
-            continue
-        with path.open("r", encoding="utf8") as file:
-            text = file.read()
-
-        sentences = udpipe_model.read(text, "conllu")
-        for s in sentences:
-            reltuples = SentenceReltuples(s, additional_relations=additional_relations)
-            dict_out[s.getText()] = reltuples.string_tuples
-            graph.add_sentence_reltuples(reltuples)
-            if graph.nodes_number > nodes_limit:
-                break
-
+    for s in sentences:
+        reltuples = SentenceReltuples(s, additional_relations=additional_relations)
+        dict_out[s.getText()] = reltuples.string_tuples
+        graph.add_sentence_reltuples(reltuples)
         if graph.nodes_number > nodes_limit:
             break
 
-        json_path = save_dir / (path.stem + "_reltuples.json")
-        with json_path.open("w", encoding="utf8") as file:
-            json.dump(dict_out, file, ensure_ascii=False, indent=4)
+    return graph, dict_out
+
+
+def build_dir_graph(
+    conllu_dir, save_dir, udpipe_model, stopwords, additional_relations, nodes_limit
+):
+    conllu = ""
+
+    for path in tqdm(conllu_dir.iterdir()):
+        if not (path.suffix == ".conllu"):
+            continue
+        with path.open("r", encoding="utf8") as file:
+            conllu += "\n" + file.read()
+
+    graph, dict_out = get_text_relations(
+        conllu, udpipe_model, stopwords, additional_relations, nodes_limit
+    )
+
+    json_path = save_dir / ("reltuples.json")
+    with json_path.open("w", encoding="utf8") as file:
+        json.dump(dict_out, file, ensure_ascii=False, indent=4)
 
     graph.save(save_dir / "graph{}.gexf".format(conllu_dir.name))
 
