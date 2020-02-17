@@ -1,7 +1,7 @@
 from flask import Flask, request
 
 from udpipe_model import UDPipeModel
-from udpipe_parse_folder import parse_text
+from syntax import parse_text
 
 app = Flask(__name__)
 UDPIPE_MODEL = UDPipeModel(r"models\russian-syntagrus-ud-2.4-190531.udpipe")
