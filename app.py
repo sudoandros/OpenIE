@@ -26,7 +26,7 @@ def parse():
 def extract():
     conllu = request.form["conllu"]
     additional_relations = ("add_rel" in request.form) and request.form["add_rel"]
-    nodes_limit = ("nodes_limit" in request.form) and NODES_LIMIT
+    nodes_limit = request.form.get("nodes_limit") or NODES_LIMIT
     graph, dict_out = get_text_relations(
         conllu, UDPIPE_MODEL, STOPWORDS, additional_relations, nodes_limit
     )
