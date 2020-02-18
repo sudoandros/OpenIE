@@ -486,5 +486,5 @@ if __name__ == "__main__":
     with open("stopwords.txt", mode="r", encoding="utf-8") as file:
         stopwords = list(file.read().split())
 
-    build_dir_graph(conllu_dir, save_dir, model, stopwords, nodes_limit, args.add)
+    build_dir_graph(conllu_dir, save_dir, model, stopwords, args.add, nodes_limit)
 

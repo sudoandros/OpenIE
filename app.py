@@ -24,9 +24,23 @@ def parse():
 
 @app.route("/extract-relations", methods=["POST"])
 def extract():
-    conllu = request.form["conllu"]
-    additional_relations = ("add_rel" in request.form) and request.form["add_rel"]
-    nodes_limit = request.form.get("nodes_limit") or NODES_LIMIT
+    if "conllu" in request.form:
+        conllu = request.form["conllu"]
+    elif "text" in request.form:
+        conllu = parse_text(request.form["text"], UDPIPE_MODEL)
+    else:
+        abort(400)
+
+    if "add_rel" in request.form:
+        additional_relations = request.form["add_rel"]
+    else:
+        additional_relations = False
+
+    if "nodes_limit" in request.form:
+        nodes_limit = request.form["nodes_limit"]
+    else:
+        nodes_limit = NODES_LIMIT
+
     graph, dict_out = get_text_relations(
         conllu, UDPIPE_MODEL, STOPWORDS, additional_relations, nodes_limit
     )
