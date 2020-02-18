@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, abort, render_template
 
 from udpipe_model import UDPipeModel
 from syntax import parse_text
@@ -11,9 +11,10 @@ with open("stopwords.txt", mode="r", encoding="utf-8") as file:
 NODES_LIMIT = 3000
 
 
-@app.route("/")
-def root():
-    return "Hello"
+@app.route("/", methods=["GET"])
+@app.route("/<title>", methods=["GET"])
+def index(title=None):
+    return render_template("index.html", title=title)
 
 
 @app.route("/parse", methods=["POST"])
