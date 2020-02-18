@@ -1,20 +1,33 @@
-from flask import Flask, request, abort, render_template
+from flask import Flask, abort, render_template, request
+from flask_wtf import FlaskForm
+from wtforms import BooleanField, StringField, SubmitField
+from wtforms.validators import DataRequired
 
-from udpipe_model import UDPipeModel
-from syntax import parse_text
 from relations import get_text_relations
+from syntax import parse_text
+from udpipe_model import UDPipeModel
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = "iamtakoiclever"
 UDPIPE_MODEL = UDPipeModel(r"models\russian-syntagrus-ud-2.4-190531.udpipe")
 with open("stopwords.txt", mode="r", encoding="utf-8") as file:
     STOPWORDS = list(file.read().split())
 NODES_LIMIT = 3000
 
 
+class TextForm(FlaskForm):
+    text = StringField("Текст для обработки", validators=[DataRequired()])
+    is_conllu = BooleanField(
+        "Содержимое является синтаксически разобранным текстом в формате CoNLL-U"
+    )
+    submit = SubmitField("Отправить")
+
+
 @app.route("/", methods=["GET"])
 @app.route("/<title>", methods=["GET"])
 def index(title=None):
-    return render_template("index.html", title=title)
+    form = TextForm()
+    return render_template("index.html", title=title, form=form)
 
 
 @app.route("/parse", methods=["POST"])
@@ -45,4 +58,4 @@ def extract():
     graph, dict_out = get_text_relations(
         conllu, UDPIPE_MODEL, STOPWORDS, additional_relations, nodes_limit
     )
-    return dict_out
+    return render_template("relations.html", relations_dict=dict_out)

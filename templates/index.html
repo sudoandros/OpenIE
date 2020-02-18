@@ -1,1 +1,14 @@
 {% extends "base.html" %}
+
+{% block content %}
+<h1>Извлечь отношения из текста</h1>
+<form action="/extract-relations" method="post" novalidate>
+    {{ form.hidden_tag() }}
+    <p>
+        {{ form.text.label }}<br>
+        {{ form.text(size=32) }}
+    </p>
+    <p>{{ form.is_conllu() }} {{ form.is_conllu.label }}</p>
+    <p>{{ form.submit() }}</p>
+</form>
+{% endblock %}

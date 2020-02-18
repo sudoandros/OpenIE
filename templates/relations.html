@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Извлеченные отношения</h1>
+{% for sentence in relations_dict %}
+<article class="post">
+    <header>
+        <div>
+            <h1>{{ sentence }}</h1>
+        </div>
+    </header>
+    {% for relation in relations_dict[sentence] %}
+    <p class="body">
+        {% for rel_elem in relation %}
+        {{ rel_elem }} 
+        {% endfor %}
+    </p>
+    {% endfor %}
+</article>
+{% if not loop.last %}
+<hr>
+{% endif %}
+{% endfor %}
+{% endblock %}
