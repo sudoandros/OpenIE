@@ -5,6 +5,10 @@
 <a href="{{ url_for('download', directory='graphs', filename=graph_filename) }}">
     Загрузить граф отношений
 </a>
+<br>
+<a href="{{ url_for('download', directory='jsons', filename=json_filename) }}">
+    Загрузить отношения в формате JSON
+</a>
 {% for sentence in relations_dict %}
 <article class="post">
     <header>

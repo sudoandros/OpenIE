@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -17,6 +18,7 @@ with open("stopwords.txt", mode="r", encoding="utf-8") as file:
     STOPWORDS = list(file.read().split())
 NODES_LIMIT = 3000
 GRAPH_DIR = Path("graphs")
+JSON_DIR = Path("jsons")
 
 
 class TextForm(FlaskForm):
@@ -65,11 +67,18 @@ def extract():
     timestamp = datetime.now().strftime("d%Y-%m-%dt%H-%M-%S.%f")
     graph_filename = "{}.gexf".format(timestamp)
     graph.save(GRAPH_DIR / graph_filename)
+    json_filename = "{}.json".format(timestamp)
+    with (JSON_DIR / json_filename).open(mode="w", encoding="utf-8") as json_file:
+        json.dump(dict_out, json_file, ensure_ascii=False, indent=4)
+
     return render_template(
-        "relations.html", relations_dict=dict_out, graph_filename=graph_filename
+        "relations.html",
+        relations_dict=dict_out,
+        graph_filename=graph_filename,
+        json_filename=json_filename,
     )
 
 
 @app.route("/download/<directory>/<filename>", methods=["GET"])
 def download(directory, filename):
-    return send_from_directory(directory, filename)
+    return send_from_directory(directory, filename, as_attachment=True)
