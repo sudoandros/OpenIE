@@ -1,15 +1,17 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <html>
-    <head>
-      {% if title %}
-      <title>{{ title }} - Извлечение отношений</title>
-      {% else %}
-      <title>Извлечение отношений</title>
-      {% endif %}
-    </head>
-    <body>
-        <div>Извлечение отношений: <a href="/index">Home</a></div>
-        <hr>
-        {% block content %}{% endblock %}
-    </body>
+
+<head>
+  {% if title %}
+  <title>{{ title }} - Извлечение отношений</title>
+  {% else %}
+  <title>Извлечение отношений</title>
+  {% endif %}
+</head>
+
+<body>
+  <nav><a href="/index">Главная</a></nav>
+  {% block content %}{% endblock %}
+</body>
+
 </html>
