@@ -2,6 +2,9 @@
 
 {% block content %}
 <h1>Извлеченные отношения</h1>
+<a href="{{ url_for('download', directory='graphs', filename=graph_filename) }}">
+    Загрузить граф отношений
+</a>
 {% for sentence in relations_dict %}
 <article class="post">
     <header>
@@ -12,7 +15,7 @@
     {% for relation in relations_dict[sentence] %}
     <p class="body">
         {% for rel_elem in relation %}
-        {{ rel_elem }} 
+        {{ rel_elem }}
         {% endfor %}
     </p>
     {% endfor %}

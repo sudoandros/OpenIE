@@ -1,4 +1,7 @@
-from flask import Flask, abort, render_template, request
+from datetime import datetime
+from pathlib import Path
+
+from flask import Flask, abort, render_template, request, send_from_directory
 from flask_wtf import FlaskForm
 from wtforms import BooleanField, StringField, SubmitField
 from wtforms.validators import DataRequired
@@ -13,6 +16,7 @@ UDPIPE_MODEL = UDPipeModel(r"models\russian-syntagrus-ud-2.4-190531.udpipe")
 with open("stopwords.txt", mode="r", encoding="utf-8") as file:
     STOPWORDS = list(file.read().split())
 NODES_LIMIT = 3000
+GRAPH_DIR = Path("graphs")
 
 
 class TextForm(FlaskForm):
@@ -24,7 +28,7 @@ class TextForm(FlaskForm):
 
 
 @app.route("/", methods=["GET"])
-@app.route("/<title>", methods=["GET"])
+@app.route("/index", methods=["GET"])
 def index(title=None):
     form = TextForm()
     return render_template("index.html", title=title, form=form)
@@ -58,4 +62,14 @@ def extract():
     graph, dict_out = get_text_relations(
         conllu, UDPIPE_MODEL, STOPWORDS, additional_relations, nodes_limit
     )
-    return render_template("relations.html", relations_dict=dict_out)
+    timestamp = datetime.now().strftime("d%Y-%m-%dt%H-%M-%S.%f")
+    graph_filename = "{}.gexf".format(timestamp)
+    graph.save(GRAPH_DIR / graph_filename)
+    return render_template(
+        "relations.html", relations_dict=dict_out, graph_filename=graph_filename
+    )
+
+
+@app.route("/download/<directory>/<filename>", methods=["GET"])
+def download(directory, filename):
+    return send_from_directory(directory, filename)
