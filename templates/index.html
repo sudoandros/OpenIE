@@ -2,11 +2,11 @@
 
 {% block content %}
 <h1>Извлечь отношения из текста</h1>
-<form action="/extract-relations" method="post" novalidate>
+<form action="/extract-relations" method="post" enctype="multipart/form-data" novalidate>
     {{ form.hidden_tag() }}
     <p>
-        {{ form.text.label }}<br>
-        {{ form.text(size=32) }}
+        {{ form.text_file.label }} <br>
+        {{ form.text_file() }}
     </p>
     <p>{{ form.is_conllu() }} {{ form.is_conllu.label }}</p>
     <p>{{ form.submit() }}</p>

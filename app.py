@@ -2,9 +2,11 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import chardet
 from flask import Flask, abort, render_template, request, send_from_directory
 from flask_wtf import FlaskForm
-from wtforms import BooleanField, StringField, SubmitField
+from flask_wtf.file import FileAllowed, FileRequired
+from wtforms import BooleanField, FileField, StringField, SubmitField
 from wtforms.validators import DataRequired
 
 from relations import get_text_relations
@@ -22,7 +24,13 @@ JSON_DIR = Path("jsons")
 
 
 class TextForm(FlaskForm):
-    text = StringField("Текст для обработки", validators=[DataRequired()])
+    text_file = FileField(
+        "Текстовый файл для обработки",
+        validators=[
+            FileRequired(),
+            FileAllowed(["txt", "conllu", "hdr", "htm"], "Только текстовые файлы"),
+        ],
+    )
     is_conllu = BooleanField(
         "Содержимое является синтаксически разобранным текстом в формате CoNLL-U"
     )
@@ -44,18 +52,23 @@ def parse():
 
 @app.route("/extract-relations", methods=["POST"])
 def extract():
-    if "conllu" in request.form:
-        conllu = request.form["conllu"]
-    elif "text" in request.form:
-        conllu = parse_text(request.form["text"], UDPIPE_MODEL)
-    else:
-        abort(400)
+    timestamp = datetime.now().strftime("d%Y-%m-%dt%H-%M-%S.%f")
+    file_content = request.files["text_file"].read()
+    encoding = chardet.detect(file_content)
+    text = file_content.decode(encoding["encoding"])
 
+    if request.form.get("is_conllu") == "y":
+        conllu = text
+    else:
+        conllu = parse_text(text, UDPIPE_MODEL)
+
+    # TODO not in use for now
     if "add_rel" in request.form:
         additional_relations = request.form["add_rel"]
     else:
         additional_relations = False
 
+    # TODO not in use for now
     if "nodes_limit" in request.form:
         nodes_limit = request.form["nodes_limit"]
     else:
@@ -64,7 +77,6 @@ def extract():
     graph, dict_out = get_text_relations(
         conllu, UDPIPE_MODEL, STOPWORDS, additional_relations, nodes_limit
     )
-    timestamp = datetime.now().strftime("d%Y-%m-%dt%H-%M-%S.%f")
     graph_filename = "{}.gexf".format(timestamp)
     graph.save(GRAPH_DIR / graph_filename)
     json_filename = "{}.json".format(timestamp)
