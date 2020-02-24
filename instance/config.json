@@ -1,0 +1,8 @@
+{
+    "SECRET_KEY": "iamtakoiclever",
+    "UDPIPE_MODEL": "models/russian-syntagrus-ud-2.4-190531.udpipe",
+    "NODES_LIMIT": 3000,
+    "GRAPH_DIR": "graphs",
+    "JSON_DIR": "jsons",
+    "CONLLU_DIR": "conllu"
+}

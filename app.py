@@ -20,14 +20,10 @@ from syntax import parse_text
 from udpipe_model import UDPipeModel
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "iamtakoiclever"
-UDPIPE_MODEL = UDPipeModel(r"models\russian-syntagrus-ud-2.4-190531.udpipe")
+app.config.from_json("instance/config.json")
+UDPIPE_MODEL = UDPipeModel(app.config["UDPIPE_MODEL"])
 with open("stopwords.txt", mode="r", encoding="utf-8") as file:
     STOPWORDS = list(file.read().split())
-NODES_LIMIT = 3000
-GRAPH_DIR = Path("graphs")
-JSON_DIR = Path("jsons")
-CONLLU_DIR = Path("conllu")
 
 
 class TextForm(FlaskForm):
@@ -39,7 +35,8 @@ class TextForm(FlaskForm):
         ],
     )
     nodes_limit = IntegerField(
-        "Максимальное количество извлеченных сущностей", default=NODES_LIMIT
+        "Максимальное количество извлеченных сущностей",
+        default=app.config["NODES_LIMIT"],
     )
     is_conllu = BooleanField(
         "Содержимое является синтаксически разобранным текстом в формате CoNLL-U"
@@ -83,14 +80,18 @@ def extract():
         conllu, UDPIPE_MODEL, STOPWORDS, additional_relations, nodes_limit
     )
     graph_filename = "{}.gexf".format(timestamp)
-    graph.save(GRAPH_DIR / graph_filename)
+    graph.save(Path(app.config["GRAPH_DIR"], graph_filename))
 
     json_filename = "{}.json".format(timestamp)
-    with (JSON_DIR / json_filename).open(mode="w", encoding="utf-8") as json_file:
+    with Path(app.config["JSON_DIR"], json_filename).open(
+        mode="w", encoding="utf-8"
+    ) as json_file:
         json.dump(dict_out, json_file, ensure_ascii=False, indent=4)
 
     conllu_filename = "{}.conllu".format(timestamp)
-    with (CONLLU_DIR / conllu_filename).open(mode="w", encoding="utf-8") as conllu_file:
+    with Path(app.config["CONLLU_DIR"], conllu_filename).open(
+        mode="w", encoding="utf-8"
+    ) as conllu_file:
         conllu_file.write(conllu)
 
     return render_template(
