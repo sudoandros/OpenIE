@@ -1,7 +1,11 @@
-# Processed texts and ML models
+# Texts and ML models
 data/
+models/
 # Result of parsing
 *.conllu
+# Result of relations extraction
+jsons/
+graphs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
