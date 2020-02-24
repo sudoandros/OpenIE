@@ -6,7 +6,13 @@ import chardet
 from flask import Flask, abort, render_template, request, send_from_directory
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileRequired
-from wtforms import BooleanField, MultipleFileField, StringField, SubmitField
+from wtforms import (
+    BooleanField,
+    IntegerField,
+    MultipleFileField,
+    StringField,
+    SubmitField,
+)
 from wtforms.validators import DataRequired
 
 from relations import get_text_relations
@@ -31,6 +37,9 @@ class TextForm(FlaskForm):
             FileRequired(),
             FileAllowed(["txt", "conllu", "hdr", "htm"], "Только текстовые файлы"),
         ],
+    )
+    nodes_limit = IntegerField(
+        "Максимальное количество извлеченных сущностей", default=NODES_LIMIT
     )
     is_conllu = BooleanField(
         "Содержимое является синтаксически разобранным текстом в формате CoNLL-U"
@@ -68,12 +77,7 @@ def extract():
             conllu = "{}\n{}".format(conllu, file_conllu)
 
     additional_relations = request.form.get("add_rel") == "y"
-
-    # TODO not in use for now
-    if "nodes_limit" in request.form:
-        nodes_limit = request.form["nodes_limit"]
-    else:
-        nodes_limit = NODES_LIMIT
+    nodes_limit = int(request.form["nodes_limit"])
 
     graph, dict_out = get_text_relations(
         conllu, UDPIPE_MODEL, STOPWORDS, additional_relations, nodes_limit

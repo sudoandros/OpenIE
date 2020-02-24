@@ -8,6 +8,10 @@
         {{ form.text_files.label }} <br>
         {{ form.text_files() }}
     </p>
+    <p>
+        {{ form.nodes_limit.label }}
+        {{ form.nodes_limit() }}
+    </p>
     <p>{{ form.is_conllu() }} {{ form.is_conllu.label }}</p>
     <p>{{ form.add_rel() }} {{ form.add_rel.label }}</p>
     <p>{{ form.submit() }}</p>
