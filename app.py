@@ -21,6 +21,7 @@ with open("stopwords.txt", mode="r", encoding="utf-8") as file:
 NODES_LIMIT = 3000
 GRAPH_DIR = Path("graphs")
 JSON_DIR = Path("jsons")
+CONLLU_DIR = Path("conllu")
 
 
 class TextForm(FlaskForm):
@@ -82,15 +83,21 @@ def extract():
     )
     graph_filename = "{}.gexf".format(timestamp)
     graph.save(GRAPH_DIR / graph_filename)
+
     json_filename = "{}.json".format(timestamp)
     with (JSON_DIR / json_filename).open(mode="w", encoding="utf-8") as json_file:
         json.dump(dict_out, json_file, ensure_ascii=False, indent=4)
+
+    conllu_filename = "{}.conllu".format(timestamp)
+    with (CONLLU_DIR / conllu_filename).open(mode="w", encoding="utf-8") as conllu_file:
+        conllu_file.write(conllu)
 
     return render_template(
         "relations.html",
         relations_dict=dict_out,
         graph_filename=graph_filename,
         json_filename=json_filename,
+        conllu_filename=conllu_filename,
     )
 
 

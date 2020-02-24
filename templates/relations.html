@@ -9,6 +9,10 @@
 <a href="{{ url_for('download', directory='jsons', filename=json_filename) }}">
     Загрузить отношения в формате JSON
 </a>
+<br>
+<a href="{{ url_for('download', directory='conllu', filename=conllu_filename) }}">
+    Загрузить результат синтаксического разбора в формате CoNLL-U
+</a>
 {% for sentence in relations_dict %}
 <article class="post">
     <header>
