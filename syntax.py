@@ -22,10 +22,8 @@ def clean_text(text, format_=None):
         result = clean_hdr(text)
     elif format_ == "sts":
         result = clean_sts(text)
-    elif format_ is None:
-        result = text
     else:
-        raise ValueError("Unsupported text format")
+        result = text
 
     result = re.sub(r"<[^>]+>", "", result)
     result = re.sub(r"\\n+", "\n", result)

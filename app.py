@@ -28,11 +28,7 @@ with open("stopwords.txt", mode="r", encoding="utf-8") as file:
 
 class TextForm(FlaskForm):
     text_files = MultipleFileField(
-        "Текстовые файлы для обработки",
-        validators=[
-            FileRequired(),
-            FileAllowed(["txt", "conllu", "hdr", "htm"], "Только текстовые файлы"),
-        ],
+        "Текстовые файлы для обработки", validators=[FileRequired()]
     )
     nodes_limit = IntegerField(
         "Максимальное количество извлеченных сущностей",
