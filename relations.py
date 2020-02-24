@@ -35,17 +35,19 @@ class SentenceReltuples:
 
     def relation_to_string(self, relation):
         if isinstance(relation, list):
-            return " ".join(self.sentence.words[id_].form for id_ in relation)
+            string_ = " ".join(self.sentence.words[id_].form for id_ in relation)
         elif isinstance(relation, str):
-            return relation
+            string_ = relation
         else:
             raise TypeError
+        return self._clean_string(string_)
 
     def arg_to_string(self, words_ids, lemmatized=False):
         if lemmatized:
-            return " ".join(self.sentence.words[id_].lemma for id_ in words_ids)
+            string_ =  " ".join(self.sentence.words[id_].lemma for id_ in words_ids)
         else:
-            return " ".join(self.sentence.words[id_].form for id_ in words_ids)
+            string_ =  " ".join(self.sentence.words[id_].form for id_ in words_ids)
+        return self._clean_string(string_)
 
     def _extract_reltuples(self):
         for word in self.sentence.words:
@@ -264,6 +266,18 @@ class SentenceReltuples:
     def _is_conjunct(self, word):
         return word.deprel == "conj"
 
+    def _clean_string(self, string_):
+        res = (
+            "".join(
+                char
+                for char in string_
+                if char.isalnum() or char.isspace() or char in ",.;-—/:%"
+            )
+            .lower()
+            .strip(" .,:;-")
+        )
+        return res
+
 
 class RelGraph:
     def __init__(self, stopwords):
@@ -298,9 +312,6 @@ class RelGraph:
         self._add_edge(source_name, target_name, relation, sentence_text)
 
     def _add_edge(self, source, target, label, description):
-        source = self._clean_string(source)
-        target = self._clean_string(target)
-        label = self._clean_string(label)
         if source not in self._graph or target not in self._graph:
             return
         if not self._graph.has_edge(source, target):
@@ -339,10 +350,7 @@ class RelGraph:
         self._graph[source][target]["weight"] += 1
 
     def _add_node(self, name, description, label=None):
-        name = self._clean_string(name)
-        if label:
-            label = self._clean_string(label)
-        else:
+        if label is None:
             label = name
         if set(name.split()).issubset(self._stopwords) or (
             len(name) == 1 and name.isalpha()
@@ -367,18 +375,6 @@ class RelGraph:
         ET.register_namespace("", "http://www.gexf.net/1.1draft")
         xml_tree = ET.ElementTree(root_element)
         xml_tree.write(path, encoding="utf-8")
-
-    def _clean_string(self, node_string):
-        res = (
-            "".join(
-                char
-                for char in node_string
-                if char.isalnum() or char.isspace() or char in ",.;-—/:%"
-            )
-            .lower()
-            .strip(" .,:;-")
-        )
-        return res
 
     def _fix_gexf(self, root_element):
         graph_node = root_element.find("{http://www.gexf.net/1.1draft}graph")
