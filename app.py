@@ -35,6 +35,7 @@ class TextForm(FlaskForm):
     is_conllu = BooleanField(
         "Содержимое является синтаксически разобранным текстом в формате CoNLL-U"
     )
+    add_rel = BooleanField('Добавить дополнительные отношения "выше" и "часть"')
     submit = SubmitField("Отправить")
 
 
@@ -66,11 +67,7 @@ def extract():
             file_conllu = parse_text(text, UDPIPE_MODEL, format_=text_format)
             conllu = "{}\n{}".format(conllu, file_conllu)
 
-    # TODO not in use for now
-    if "add_rel" in request.form:
-        additional_relations = request.form["add_rel"]
-    else:
-        additional_relations = False
+    additional_relations = request.form.get("add_rel") == "y"
 
     # TODO not in use for now
     if "nodes_limit" in request.form:
