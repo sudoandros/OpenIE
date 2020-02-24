@@ -6,7 +6,7 @@ import chardet
 from flask import Flask, abort, render_template, request, send_from_directory
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileRequired
-from wtforms import BooleanField, FileField, StringField, SubmitField
+from wtforms import BooleanField, MultipleFileField, StringField, SubmitField
 from wtforms.validators import DataRequired
 
 from relations import get_text_relations
@@ -24,8 +24,8 @@ JSON_DIR = Path("jsons")
 
 
 class TextForm(FlaskForm):
-    text_file = FileField(
-        "Текстовый файл для обработки",
+    text_files = MultipleFileField(
+        "Текстовые файлы для обработки",
         validators=[
             FileRequired(),
             FileAllowed(["txt", "conllu", "hdr", "htm"], "Только текстовые файлы"),

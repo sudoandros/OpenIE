@@ -5,8 +5,8 @@
 <form action="/extract-relations" method="post" enctype="multipart/form-data" novalidate>
     {{ form.hidden_tag() }}
     <p>
-        {{ form.text_file.label }} <br>
-        {{ form.text_file() }}
+        {{ form.text_files.label }} <br>
+        {{ form.text_files() }}
     </p>
     <p>{{ form.is_conllu() }} {{ form.is_conllu.label }}</p>
     <p>{{ form.submit() }}</p>
