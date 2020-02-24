@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import chardet
@@ -60,7 +60,8 @@ def parse():
 
 @app.route("/extract-relations", methods=["POST"])
 def extract():
-    timestamp = datetime.now().strftime("d%Y-%m-%dt%H-%M-%S.%f")
+    tz_moscow = timezone(timedelta(hours=3))
+    timestamp = datetime.now(tz=tz_moscow).strftime("d%Y-%m-%dt%H-%M-%S.%f")
     conllu = ""
     for text_file in request.files.getlist("text_files"):
         file_content = text_file.read()
