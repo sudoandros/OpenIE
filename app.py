@@ -53,14 +53,17 @@ def parse():
 @app.route("/extract-relations", methods=["POST"])
 def extract():
     timestamp = datetime.now().strftime("d%Y-%m-%dt%H-%M-%S.%f")
-    file_content = request.files["text_file"].read()
-    encoding = chardet.detect(file_content)
-    text = file_content.decode(encoding["encoding"])
-
-    if request.form.get("is_conllu") == "y":
-        conllu = text
-    else:
-        conllu = parse_text(text, UDPIPE_MODEL)
+    conllu = ""
+    for text_file in request.files.getlist("text_files"):
+        file_content = text_file.read()
+        encoding = chardet.detect(file_content)
+        text = file_content.decode(encoding["encoding"])
+        text_format = Path(text_file.filename).suffix[1:]
+        if request.form.get("is_conllu") == "y":
+            conllu = text
+        else:
+            file_conllu = parse_text(text, UDPIPE_MODEL, format_=text_format)
+            conllu = "{}\n{}".format(conllu, file_conllu)
 
     # TODO not in use for now
     if "add_rel" in request.form:
