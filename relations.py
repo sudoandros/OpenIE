@@ -58,23 +58,24 @@ class SentenceReltuples:
             if word.deprel == "cop":
                 self._reltuples.extend(self._get_copula_reltuples(word))
             elif word.upostag == "VERB":
-                self._extract_verb_reltuples(word)
+                self._reltuples.extend(self._get_verb_reltuples(word))
         if self._add_rel:
             for reltuple in self._reltuples.copy():
                 self._extract_additional_reltuples(reltuple[0])
                 self._extract_additional_reltuples(reltuple[2])
 
-    def _extract_verb_reltuples(self, verb):
+    def _get_verb_reltuples(self, verb):
         for child_id in verb.children:
             child = self._sentence.words[child_id]
             if child.deprel == "xcomp":
-                return
+                return ()
         subjects = self._get_subjects(verb)
         right_args = self._get_right_args(verb)
-        for subj in subjects:
-            for arg in right_args:
-                relation = self._get_relation(verb, right_arg=arg)
-                self._reltuples.append((subj, relation, arg))
+        return tuple(
+            (subj, self._get_relation(verb, right_arg=arg), arg)
+            for subj in subjects
+            for arg in right_args
+        )
 
     def _get_copula_reltuples(self, copula):
         right_arg = self._get_right_args(copula)[0]
