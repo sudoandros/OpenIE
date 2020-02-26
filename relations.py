@@ -56,7 +56,7 @@ class SentenceReltuples:
     def _extract_reltuples(self):
         for word in self._sentence.words:
             if word.deprel == "cop":
-                self._extract_copula_reltuples(word)
+                self._reltuples.extend(self._get_copula_reltuples(word))
             elif word.upostag == "VERB":
                 self._extract_verb_reltuples(word)
         if self._add_rel:
@@ -76,13 +76,12 @@ class SentenceReltuples:
                 relation = self._get_relation(verb, right_arg=arg)
                 self._reltuples.append((subj, relation, arg))
 
-    def _extract_copula_reltuples(self, copula):
+    def _get_copula_reltuples(self, copula):
         right_arg = self._get_right_args(copula)[0]
         parent = self._sentence.words[copula.head]
         subjects = self._get_subjects(parent)
         relation = self._get_copula(copula)
-        for subj in subjects:
-            self._reltuples.append((subj, relation, right_arg))
+        return tuple((subj, relation, right_arg) for subj in subjects)
 
     def _extract_additional_reltuples(self, words_ids):
         root = self._get_root(words_ids)
