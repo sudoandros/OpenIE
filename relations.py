@@ -15,15 +15,14 @@ from udpipe_model import UDPipeModel
 
 class SentenceReltuples:
     def __init__(self, sentence, additional_relations=False):
-        self._reltuples = []
         self._sentence = sentence
-        self._string_tuples = None
-        self._add_rel = additional_relations
-        self._extract_reltuples()
+        self._reltuples = self._extract_reltuples(
+            additional_relations=additional_relations
+        )
 
     @property
     def sentence(self):
-        return self._sentence
+        return self._sentence.getText()
 
     def string_tuples(self, lemmatize_args=False):
         return tuple(
@@ -32,10 +31,10 @@ class SentenceReltuples:
         )
 
     def _to_string_tuple(self, reltuple, lemmatize_args=False):
-        left = self._arg_to_string(reltuple[0], lemmatized=lemmatize_args)
-        center = self._relation_to_string(reltuple[1])
-        right = self._arg_to_string(reltuple[2], lemmatized=lemmatize_args)
-        return (left, center, right)
+        left_arg = self._arg_to_string(reltuple[0], lemmatized=lemmatize_args)
+        relation = self._relation_to_string(reltuple[1])
+        right_arg = self._arg_to_string(reltuple[2], lemmatized=lemmatize_args)
+        return (left_arg, relation, right_arg)
 
     def _relation_to_string(self, relation):
         if isinstance(relation, list):
@@ -53,16 +52,18 @@ class SentenceReltuples:
             string_ = " ".join(self._sentence.words[id_].form for id_ in words_ids)
         return self._clean_string(string_)
 
-    def _extract_reltuples(self):
+    def _extract_reltuples(self, additional_relations=False):
+        result = ()
         for word in self._sentence.words:
             if word.deprel == "cop":
-                self._reltuples.extend(self._get_copula_reltuples(word))
+                result += self._get_copula_reltuples(word)
             elif word.upostag == "VERB":
-                self._reltuples.extend(self._get_verb_reltuples(word))
-        if self._add_rel:
-            for reltuple in self._reltuples.copy():
-                self._extract_additional_reltuples(reltuple[0])
-                self._extract_additional_reltuples(reltuple[2])
+                result += self._get_verb_reltuples(word)
+        if additional_relations:
+            for left_arg, _, right_arg in result:
+                result += self._get_additional_reltuples(left_arg)
+                result += self._get_additional_reltuples(right_arg)
+        return result
 
     def _get_verb_reltuples(self, verb):
         for child_id in verb.children:
@@ -84,10 +85,11 @@ class SentenceReltuples:
         relation = self._get_copula(copula)
         return tuple((subj, relation, right_arg) for subj in subjects)
 
-    def _extract_additional_reltuples(self, words_ids):
+    def _get_additional_reltuples(self, words_ids):
+        result = ()
         root = self._get_root(words_ids)
         main_phrase_ids = words_ids
-        upper = [
+        upper = (
             "appos",
             "flat",
             "flat:foreign",
@@ -96,8 +98,8 @@ class SentenceReltuples:
             "nummod:entity",
             "nummod:gov",
             "conj",
-        ]
-        dependent = ["nmod"]
+        )
+        dependent = ("nmod",)
         children_ids = [id_ for id_ in words_ids if id_ in root.children]
         for child_id in children_ids:
             child = self._sentence.words[child_id]
@@ -105,19 +107,20 @@ class SentenceReltuples:
             if child.deprel in upper:
                 subtree = self._get_subtree(child)
                 descendants_ids = [id_ for id_ in words_ids if id_ in subtree]
-                self._reltuples.append((descendants_ids, "выше", words_ids))
+                result += ((descendants_ids, "выше", words_ids),)
             elif child.deprel in dependent:
                 subtree = self._get_subtree(child)
                 descendants_ids = [id_ for id_ in words_ids if id_ in subtree]
-                self._reltuples.append((descendants_ids, "часть", words_ids))
-            self._extract_additional_reltuples(descendants_ids)
+                result += ((descendants_ids, "часть", words_ids),)
+            result += self._get_additional_reltuples(descendants_ids)
             main_phrase_ids = [
                 id_ for id_ in main_phrase_ids if id_ not in descendants_ids
             ]
         if len(words_ids) != len(main_phrase_ids):
-            self._reltuples.append((main_phrase_ids, "выше", words_ids))
+            result += ((main_phrase_ids, "выше", words_ids),)
         if len(main_phrase_ids) > 1:
-            self._reltuples.append(([root.id], "выше", main_phrase_ids))
+            result += (([root.id], "выше", main_phrase_ids),)
+        return result
 
     def _get_relation(self, word, right_arg=None):
         prefix = self._get_relation_prefix(word)
@@ -262,10 +265,10 @@ class SentenceReltuples:
         return root
 
     def _is_subject(self, word):
-        return word.deprel in ["nsubj", "nsubj:pass"]
+        return word.deprel in ("nsubj", "nsubj:pass")
 
     def _is_right_arg(self, word):
-        return word.deprel in ["obj", "iobj", "obl", "obl:agent", "iobl"]
+        return word.deprel in ("obj", "iobj", "obl", "obl:agent", "iobl")
 
     def _is_conjunct(self, word):
         return word.deprel == "conj"
@@ -303,7 +306,7 @@ class RelGraph:
         return self._graph.number_of_edges()
 
     def add_sentence_reltuples(self, sentence_reltuples):
-        sentence_text = sentence_reltuples.sentence.getText()
+        sentence_text = sentence_reltuples.sentence
         for (
             (left_arg, relation, right_arg),
             (left_arg_lemmatized, _, right_arg_lemmatized),
@@ -313,7 +316,9 @@ class RelGraph:
         ):
             self._add_node(left_arg_lemmatized, sentence_text, label=left_arg)
             self._add_node(right_arg_lemmatized, sentence_text, label=right_arg)
-            self._add_edge(left_arg_lemmatized, right_arg_lemmatized, relation, sentence_text)
+            self._add_edge(
+                left_arg_lemmatized, right_arg_lemmatized, relation, sentence_text
+            )
 
     def _add_edge(self, source, target, label, description):
         if source not in self._graph or target not in self._graph:
