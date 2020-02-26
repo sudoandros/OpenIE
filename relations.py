@@ -298,6 +298,10 @@ class RelGraph:
     def nodes_number(self):
         return self._graph.number_of_nodes()
 
+    @property
+    def edges_number(self):
+        return self._graph.number_of_edges()
+
     def add_sentence_reltuples(self, sentence_reltuples):
         sentence_text = sentence_reltuples.sentence.getText()
         for (
@@ -455,6 +459,7 @@ def build_dir_graph(
         json.dump(dict_out, file, ensure_ascii=False, indent=4)
 
     graph.save(save_dir / "graph{}.gexf".format(conllu_dir.name))
+    print(graph.nodes_number, graph.edges_number)
 
 
 if __name__ == "__main__":
