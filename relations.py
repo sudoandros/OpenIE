@@ -15,15 +15,14 @@ from udpipe_model import UDPipeModel
 
 class SentenceReltuples:
     def __init__(self, sentence, additional_relations=False):
-        self._reltuples = []
         self._sentence = sentence
-        self._string_tuples = None
-        self._add_rel = additional_relations
-        self._extract_reltuples()
+        self._reltuples = self._extract_reltuples(
+            additional_relations=additional_relations
+        )
 
     @property
     def sentence(self):
-        return self._sentence
+        return self._sentence.getText()
 
     def string_tuples(self, lemmatize_args=False):
         return tuple(
@@ -53,16 +52,18 @@ class SentenceReltuples:
             string_ = " ".join(self._sentence.words[id_].form for id_ in words_ids)
         return self._clean_string(string_)
 
-    def _extract_reltuples(self):
+    def _extract_reltuples(self, additional_relations=False):
+        result = ()
         for word in self._sentence.words:
             if word.deprel == "cop":
-                self._reltuples.extend(self._get_copula_reltuples(word))
+                result += self._get_copula_reltuples(word)
             elif word.upostag == "VERB":
-                self._reltuples.extend(self._get_verb_reltuples(word))
-        if self._add_rel:
+                result += self._get_verb_reltuples(word)
+        if additional_relations:
             for left_arg, _, right_arg in self._reltuples.copy():
-                self._reltuples.extend(self._get_additional_reltuples(left_arg))
-                self._reltuples.extend(self._get_additional_reltuples(right_arg))
+                result += self._get_additional_reltuples(left_arg)
+                result += self._get_additional_reltuples(right_arg)
+        return result
 
     def _get_verb_reltuples(self, verb):
         for child_id in verb.children:
@@ -305,7 +306,7 @@ class RelGraph:
         return self._graph.number_of_edges()
 
     def add_sentence_reltuples(self, sentence_reltuples):
-        sentence_text = sentence_reltuples.sentence.getText()
+        sentence_text = sentence_reltuples.sentence
         for (
             (left_arg, relation, right_arg),
             (left_arg_lemmatized, _, right_arg_lemmatized),
