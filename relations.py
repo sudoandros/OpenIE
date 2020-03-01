@@ -16,19 +16,17 @@ from udpipe_model import UDPipeModel
 class SentenceReltuples:
     def __init__(self, sentence, additional_relations=False):
         self._sentence = sentence
-        self._reltuples = self._extract_reltuples(
-            additional_relations=additional_relations
-        )
+        self._reltuples = self._get_reltuples(additional_relations=additional_relations)
 
     @property
     def sentence(self):
         return self._sentence.getText()
 
     def string_tuples(self, lemmatize_args=False):
-        return tuple(
+        return [
             self._to_string_tuple(reltuple, lemmatize_args=lemmatize_args)
             for reltuple in self._reltuples
-        )
+        ]
 
     def _to_string_tuple(self, reltuple, lemmatize_args=False):
         left_arg = self._arg_to_string(reltuple[0], lemmatized=lemmatize_args)
@@ -52,15 +50,27 @@ class SentenceReltuples:
             string_ = " ".join(self._sentence.words[id_].form for id_ in words_ids)
         return self._clean_string(string_)
 
-    def _extract_reltuples(self, additional_relations=False):
-        result = ()
+    def _clean_string(self, string_):
+        res = (
+            "".join(
+                char
+                for char in string_
+                if char.isalnum() or char.isspace() or char in ",.;-—/:%"
+            )
+            .lower()
+            .strip(" .,:;-")
+        )
+        return res
+
+    def _get_reltuples(self, additional_relations=False):
+        result = []
         for word in self._sentence.words:
             if word.deprel == "cop":
                 result += self._get_copula_reltuples(word)
             elif word.upostag == "VERB":
                 result += self._get_verb_reltuples(word)
         if additional_relations:
-            for left_arg, _, right_arg in result:
+            for left_arg, _, right_arg in result.copy():
                 result += self._get_additional_reltuples(left_arg)
                 result += self._get_additional_reltuples(right_arg)
         return result
@@ -72,21 +82,21 @@ class SentenceReltuples:
                 return ()
         subjects = self._get_subjects(verb)
         right_args = self._get_right_args(verb)
-        return tuple(
+        return [
             (subj, self._get_relation(verb, right_arg=arg), arg)
             for subj in subjects
             for arg in right_args
-        )
+        ]
 
     def _get_copula_reltuples(self, copula):
         right_arg = self._get_right_args(copula)[0]
         parent = self._sentence.words[copula.head]
         subjects = self._get_subjects(parent)
         relation = self._get_copula(copula)
-        return tuple((subj, relation, right_arg) for subj in subjects)
+        return [(subj, relation, right_arg) for subj in subjects]
 
     def _get_additional_reltuples(self, words_ids):
-        result = ()
+        result = []
         root = self._get_root(words_ids)
         main_phrase_ids = words_ids
         upper = (
@@ -107,19 +117,19 @@ class SentenceReltuples:
             if child.deprel in upper:
                 subtree = self._get_subtree(child)
                 descendants_ids = [id_ for id_ in words_ids if id_ in subtree]
-                result += ((descendants_ids, "выше", words_ids),)
+                result.append((descendants_ids, "выше", words_ids))
             elif child.deprel in dependent:
                 subtree = self._get_subtree(child)
                 descendants_ids = [id_ for id_ in words_ids if id_ in subtree]
-                result += ((descendants_ids, "часть", words_ids),)
+                result.append((descendants_ids, "часть", words_ids))
             result += self._get_additional_reltuples(descendants_ids)
             main_phrase_ids = [
                 id_ for id_ in main_phrase_ids if id_ not in descendants_ids
             ]
         if len(words_ids) != len(main_phrase_ids):
-            result += ((main_phrase_ids, "выше", words_ids),)
+            result.append((words_ids, "выше", main_phrase_ids))
         if len(main_phrase_ids) > 1:
-            result += (([root.id], "выше", main_phrase_ids),)
+            result.append((main_phrase_ids, "выше", [root.id]))
         return result
 
     def _get_relation(self, word, right_arg=None):
@@ -273,18 +283,6 @@ class SentenceReltuples:
     def _is_conjunct(self, word):
         return word.deprel == "conj"
 
-    def _clean_string(self, string_):
-        res = (
-            "".join(
-                char
-                for char in string_
-                if char.isalnum() or char.isspace() or char in ",.;-—/:%"
-            )
-            .lower()
-            .strip(" .,:;-")
-        )
-        return res
-
 
 class RelGraph:
     def __init__(self, stopwords):
@@ -292,9 +290,9 @@ class RelGraph:
         self._stopwords = set(stopwords)
 
     @classmethod
-    def from_reltuples_list(cls, stopwords, reltuples_list):
+    def from_reltuples_iter(cls, stopwords, reltuples_iter):
         graph = cls(stopwords)
-        for sentence_reltuple in reltuples_list:
+        for sentence_reltuple in reltuples_iter:
             graph.add_sentence_reltuples(sentence_reltuple)
 
     @property
@@ -436,7 +434,7 @@ def get_text_relations(
 
     for s in sentences:
         reltuples = SentenceReltuples(s, additional_relations=additional_relations)
-        dict_out[s.getText()] = reltuples.string_tuples()
+        dict_out[reltuples.sentence] = reltuples.string_tuples()
         graph.add_sentence_reltuples(reltuples)
         if graph.nodes_number > nodes_limit:
             break
