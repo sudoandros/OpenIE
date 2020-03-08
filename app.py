@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import chardet
+import gensim.downloader
 from flask import Flask, abort, render_template, request, send_from_directory
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileRequired
@@ -22,6 +23,7 @@ from udpipe_model import UDPipeModel
 app = Flask(__name__)
 app.config.from_json("instance/config.json")
 UDPIPE_MODEL = UDPipeModel(app.config["UDPIPE_MODEL"])
+W2V_MODEL = gensim.downloader.load("word2vec-ruscorpora-300")
 with open("stopwords.txt", mode="r", encoding="utf-8") as file:
     STOPWORDS = list(file.read().split())
 
@@ -74,7 +76,7 @@ def extract():
     nodes_limit = int(request.form["nodes_limit"])
 
     graph, dict_out = get_text_relations(
-        conllu, UDPIPE_MODEL, STOPWORDS, additional_relations, nodes_limit
+        conllu, UDPIPE_MODEL, STOPWORDS, additional_relations, nodes_limit, W2V_MODEL
     )
     graph_filename = "{}.gexf".format(timestamp)
     graph.save(Path(app.config["GRAPH_DIR"], graph_filename))
