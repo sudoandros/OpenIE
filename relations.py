@@ -463,7 +463,7 @@ def cluster(
     n_sentences = len(sentences)
     for cluster_size in range(min_cluster_size, max_cluster_size, cluster_size_step):
         n_clusters = n_sentences // cluster_size
-        kmeans = KMeans(n_clusters=n_clusters, n_jobs=-1)
+        kmeans = KMeans(n_clusters=n_clusters, n_jobs=1)
         kmeans.fit(X)
         score = silhouette_score(X, kmeans.labels_)
         if score >= max_sil_score:

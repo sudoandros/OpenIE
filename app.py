@@ -6,7 +6,6 @@ import chardet
 import gensim.downloader
 from flask import (
     Flask,
-    abort,
     redirect,
     render_template,
     request,
@@ -14,13 +13,7 @@ from flask import (
     url_for,
 )
 from flask_wtf import FlaskForm
-from wtforms import (
-    BooleanField,
-    IntegerField,
-    MultipleFileField,
-    StringField,
-    SubmitField,
-)
+from wtforms import BooleanField, IntegerField, MultipleFileField, SubmitField
 
 from relations import get_text_relations
 from syntax import parse_text
@@ -110,3 +103,7 @@ def extract():
 @app.route("/download/<directory>/<filename>", methods=["GET"])
 def download(directory, filename):
     return send_from_directory(directory, filename, as_attachment=True)
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
