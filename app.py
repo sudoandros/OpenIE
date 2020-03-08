@@ -4,9 +4,16 @@ from pathlib import Path
 
 import chardet
 import gensim.downloader
-from flask import Flask, abort, render_template, request, send_from_directory
+from flask import (
+    Flask,
+    abort,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
 from flask_wtf import FlaskForm
-from flask_wtf.file import FileAllowed, FileRequired
 from wtforms import (
     BooleanField,
     IntegerField,
@@ -14,7 +21,6 @@ from wtforms import (
     StringField,
     SubmitField,
 )
-from wtforms.validators import DataRequired
 
 from relations import get_text_relations
 from syntax import parse_text
@@ -29,9 +35,7 @@ with open("stopwords.txt", mode="r", encoding="utf-8") as file:
 
 
 class TextForm(FlaskForm):
-    text_files = MultipleFileField(
-        "Текстовые файлы для обработки", validators=[FileRequired()]
-    )
+    text_files = MultipleFileField("Текстовые файлы для обработки")
     nodes_limit = IntegerField(
         "Максимальное количество извлеченных сущностей",
         default=app.config["NODES_LIMIT"],
@@ -43,10 +47,11 @@ class TextForm(FlaskForm):
     submit = SubmitField("Отправить")
 
 
-@app.route("/", methods=["GET"])
-@app.route("/index", methods=["GET"])
+@app.route("/", methods=["GET", "POST"])
 def index(title=None):
     form = TextForm()
+    if form.validate_on_submit():
+        return redirect(url_for("extract"), code=307)
     return render_template("index.html", title=title, form=form)
 
 

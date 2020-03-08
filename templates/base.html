@@ -10,7 +10,7 @@
 </head>
 
 <body>
-  <nav><a href="/index">Главная</a></nav>
+  <nav><a href="{{ url_for('index') }}">Главная</a></nav>
   {% block content %}{% endblock %}
 </body>
 
