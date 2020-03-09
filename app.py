@@ -27,6 +27,14 @@ with open("stopwords.txt", mode="r", encoding="utf-8") as file:
     STOPWORDS = list(file.read().split())
 
 
+def guess_encoding(content):
+    encoding = chardet.detect(content)["encoding"]
+    if encoding == "utf-8":
+        return "utf-8"
+    else:
+        return "cp1251"
+
+
 class TextForm(FlaskForm):
     text_files = MultipleFileField("Текстовые файлы для обработки")
     nodes_limit = IntegerField(
@@ -61,8 +69,8 @@ def extract():
     conllu = ""
     for text_file in request.files.getlist("text_files"):
         file_content = text_file.read()
-        encoding = chardet.detect(file_content)
-        text = file_content.decode(encoding["encoding"])
+        encoding = guess_encoding(file_content)
+        text = file_content.decode(encoding)
         text_format = Path(text_file.filename).suffix[1:]
         if request.form.get("is_conllu") == "y":
             conllu = text
