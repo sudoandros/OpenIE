@@ -18,8 +18,9 @@ from udpipe_model import UDPipeModel
 
 
 class SentenceReltuples:
-    def __init__(self, sentence, additional_relations=False):
+    def __init__(self, sentence, additional_relations=False, stopwords=[]):
         self.sentence = sentence
+        self._stopwords = set(stopwords)
         self._reltuples = self._get_reltuples(additional_relations=additional_relations)
 
     def string_tuples(self, lemmatize_args=False):
@@ -73,7 +74,11 @@ class SentenceReltuples:
             for left_arg, _, right_arg in result.copy():
                 result += self._get_additional_reltuples(left_arg)
                 result += self._get_additional_reltuples(right_arg)
-        return result
+        return [
+            (left_arg, relation, right_arg)
+            for left_arg, relation, right_arg in result
+            if not self._is_stopwords(left_arg) and not self._is_stopwords(right_arg)
+        ]
 
     def _get_verb_reltuples(self, verb):
         for child_id in verb.children:
@@ -274,6 +279,15 @@ class SentenceReltuples:
                 root = word
         return root
 
+    def _is_stopwords(self, words_ids):
+        return {self.sentence.words[id_].lemma for id_ in words_ids}.issubset(
+            self._stopwords
+        ) or (
+            len(words_ids) == 1
+            and len(self.sentence.words[words_ids[0]].lemma) == 1
+            and self.sentence.words[words_ids[0]].lemma.isalpha()
+        )
+
     def _is_subject(self, word):
         return word.deprel in ("nsubj", "nsubj:pass")
 
@@ -285,13 +299,12 @@ class SentenceReltuples:
 
 
 class RelGraph:
-    def __init__(self, stopwords):
+    def __init__(self):
         self._graph = nx.DiGraph()
-        self._stopwords = set(stopwords)
 
     @classmethod
-    def from_reltuples_iter(cls, stopwords, reltuples_iter):
-        graph = cls(stopwords)
+    def from_reltuples_iter(cls, reltuples_iter):
+        graph = cls()
         for sentence_reltuple in reltuples_iter:
             graph.add_sentence_reltuples(sentence_reltuple)
 
@@ -363,10 +376,6 @@ class RelGraph:
     def _add_node(self, name, description, label=None, type_=0):
         if label is None:
             label = name
-        if set(name.split()).issubset(self._stopwords) or (
-            len(name) == 1 and name.isalpha()
-        ):
-            return
         if name not in self._graph:
             self._graph.add_node(
                 name, label=label, description=description, weight=1, feat_type=type_
@@ -435,12 +444,14 @@ def get_text_relations(
     conllu, udpipe_model, stopwords, additional_relations, nodes_limit, w2v_model
 ):
     dict_out = {}
-    graph = RelGraph(stopwords)
+    graph = RelGraph()
     sentences = udpipe_model.read(conllu, "conllu")
     labels = cluster(sentences, stopwords, w2v_model)
 
     for s, lbl in zip(sentences, labels):
-        reltuples = SentenceReltuples(s, additional_relations=additional_relations)
+        reltuples = SentenceReltuples(
+            s, additional_relations=additional_relations, stopwords=stopwords
+        )
         dict_out[reltuples.sentence.getText()] = reltuples.string_tuples()
         graph.add_sentence_reltuples(reltuples, cluster=lbl)
         if graph.nodes_number > nodes_limit:
