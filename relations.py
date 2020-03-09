@@ -440,60 +440,80 @@ class RelGraph:
                     attvalue_node.set("for", edge_attributes[attr_for])
 
 
-def get_text_relations(
-    conllu, udpipe_model, stopwords, additional_relations, nodes_limit, w2v_model
-):
-    dict_out = {}
-    graph = RelGraph()
-    sentences = udpipe_model.read(conllu, "conllu")
-    labels = cluster(sentences, w2v_model)
-    for s, lbl in zip(sentences, labels):
-        reltuples = SentenceReltuples(
-            s, additional_relations=additional_relations, stopwords=stopwords
-        )
-        dict_out[reltuples.sentence.getText()] = reltuples.string_tuples()
-        graph.add_sentence_reltuples(reltuples, cluster=lbl)
-        if graph.nodes_number > nodes_limit:
-            break
+class TextReltuples:
+    def __init__(
+        self,
+        conllu,
+        udpipe_model,
+        w2v_model,
+        stopwords,
+        additional_relations,
+        nodes_limit,
+    ):
+        sentences = udpipe_model.read(conllu, "conllu")
+        labels = self._cluster(sentences, w2v_model)
+        self._reltuples = []
+        self._dict = {}
+        self._graph = RelGraph()
+        for s, lbl in zip(sentences, labels):
+            sentence_reltuples = SentenceReltuples(
+                s, additional_relations=additional_relations, stopwords=stopwords
+            )
+            self._reltuples.append(sentence_reltuples)
+            self._graph.add_sentence_reltuples(sentence_reltuples, cluster=lbl)
+            self._dict[
+                sentence_reltuples.sentence.getText()
+            ] = sentence_reltuples.string_tuples()
+            if self._graph.nodes_number > nodes_limit:
+                break
 
-    return graph, dict_out
+    @property
+    def graph(self):
+        return self._graph
 
+    @property
+    def dictionary(self):
+        return self._dict
 
-def cluster(
-    sentences,
-    w2v_model,
-    min_cluster_size=50,
-    max_cluster_size=150,
-    cluster_size_step=10,
-):
-    X = np.array([get_sentence_vector(s, w2v_model) for s in sentences])
-    max_sil_score = -1
-    res_labels = None
-    n_sentences = len(sentences)
-    for cluster_size in range(min_cluster_size, max_cluster_size, cluster_size_step):
-        n_clusters = n_sentences // cluster_size
-        kmeans = KMeans(n_clusters=n_clusters, n_jobs=1)
-        kmeans.fit(X)
-        score = silhouette_score(X, kmeans.labels_)
-        if score >= max_sil_score:
-            max_sil_score = score
-            res_labels = kmeans.labels_
-    return res_labels
+    def _cluster(
+        self,
+        sentences,
+        w2v_model,
+        min_cluster_size=20,
+        max_cluster_size=100,
+        cluster_size_step=10,
+    ):
+        X = np.array([self._get_sentence_vector(s, w2v_model) for s in sentences])
+        max_sil_score = -1
+        res_labels = None
+        n_sentences = len(sentences)
+        for cluster_size in range(
+            min_cluster_size, max_cluster_size, cluster_size_step
+        ):
+            n_clusters = n_sentences // cluster_size
+            kmeans = KMeans(n_clusters=n_clusters, n_jobs=1)
+            kmeans.fit(X)
+            score = silhouette_score(X, kmeans.labels_)
+            if score >= max_sil_score:
+                max_sil_score = score
+                res_labels = kmeans.labels_
+        return res_labels
 
-
-def get_sentence_vector(sentence, w2v_model):
-    vector = np.zeros(300)
-    count = 0
-    for word in sentence.words:
-        try:
-            vector = np.add(vector, w2v_model["{}_{}".format(word.lemma, word.upostag)])
-            count += 1
-        except KeyError:
-            continue
-    if count > 0:
-        return vector / count
-    else:
-        return vector
+    def _get_sentence_vector(self, sentence, w2v_model):
+        vector = np.zeros(300)
+        count = 0
+        for word in sentence.words:
+            try:
+                vector = np.add(
+                    vector, w2v_model["{}_{}".format(word.lemma, word.upostag)]
+                )
+                count += 1
+            except KeyError:
+                continue
+        if count > 0:
+            return vector / count
+        else:
+            return vector
 
 
 def build_dir_graph(
@@ -513,16 +533,16 @@ def build_dir_graph(
         with path.open("r", encoding="utf8") as file:
             conllu = "{}\n{}".format(conllu, file.read())
 
-    graph, dict_out = get_text_relations(
-        conllu, udpipe_model, stopwords, additional_relations, nodes_limit, w2v_model
+    text_reltuples = TextReltuples(
+        conllu, udpipe_model, w2v_model, stopwords, additional_relations, nodes_limit
     )
 
     json_path = save_dir / ("relations.json")
     with json_path.open("w", encoding="utf8") as file:
-        json.dump(dict_out, file, ensure_ascii=False, indent=4)
+        json.dump(text_reltuples.dictionary, file, ensure_ascii=False, indent=4)
 
-    graph.save(save_dir / "graph{}.gexf".format(conllu_dir.name))
-    print(graph.nodes_number, graph.edges_number)
+    text_reltuples.graph.save(save_dir / "graph{}.gexf".format(conllu_dir.name))
+    print(text_reltuples.graph.nodes_number, text_reltuples.graph.edges_number)
 
 
 if __name__ == "__main__":

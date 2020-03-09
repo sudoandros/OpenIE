@@ -15,7 +15,7 @@ from flask import (
 from flask_wtf import FlaskForm
 from wtforms import BooleanField, IntegerField, MultipleFileField, SubmitField
 
-from relations import get_text_relations
+from relations import TextReltuples
 from syntax import parse_text
 from udpipe_model import UDPipeModel
 
@@ -73,17 +73,17 @@ def extract():
     additional_relations = request.form.get("add_rel") == "y"
     nodes_limit = int(request.form["nodes_limit"])
 
-    graph, dict_out = get_text_relations(
-        conllu, UDPIPE_MODEL, STOPWORDS, additional_relations, nodes_limit, W2V_MODEL
+    text_reltuples = TextReltuples(
+        conllu, UDPIPE_MODEL, W2V_MODEL, STOPWORDS, additional_relations, nodes_limit
     )
     graph_filename = "{}.gexf".format(timestamp)
-    graph.save(Path(app.config["GRAPH_DIR"], graph_filename))
+    text_reltuples.graph.save(Path(app.config["GRAPH_DIR"], graph_filename))
 
     json_filename = "{}.json".format(timestamp)
     with Path(app.config["JSON_DIR"], json_filename).open(
         mode="w", encoding="utf-8"
     ) as json_file:
-        json.dump(dict_out, json_file, ensure_ascii=False, indent=4)
+        json.dump(text_reltuples.dictionary, json_file, ensure_ascii=False, indent=4)
 
     conllu_filename = "{}.conllu".format(timestamp)
     with Path(app.config["CONLLU_DIR"], conllu_filename).open(
@@ -93,7 +93,7 @@ def extract():
 
     return render_template(
         "relations.html",
-        relations_dict=dict_out,
+        relations_dict=text_reltuples.dictionary,
         graph_filename=graph_filename,
         json_filename=json_filename,
         conllu_filename=conllu_filename,
