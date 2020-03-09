@@ -485,12 +485,14 @@ class TextReltuples:
     ):
         X = np.array([self._get_sentence_vector(s, w2v_model) for s in sentences])
         max_sil_score = -1
-        res_labels = None
         n_sentences = len(sentences)
+        res_labels = [0] * n_sentences
         for cluster_size in range(
             min_cluster_size, max_cluster_size, cluster_size_step
         ):
             n_clusters = n_sentences // cluster_size
+            if n_clusters < 2:
+                continue
             kmeans = KMeans(n_clusters=n_clusters, n_jobs=1)
             kmeans.fit(X)
             score = silhouette_score(X, kmeans.labels_)
