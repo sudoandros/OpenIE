@@ -446,8 +446,7 @@ def get_text_relations(
     dict_out = {}
     graph = RelGraph()
     sentences = udpipe_model.read(conllu, "conllu")
-    labels = cluster(sentences, stopwords, w2v_model)
-
+    labels = cluster(sentences, w2v_model)
     for s, lbl in zip(sentences, labels):
         reltuples = SentenceReltuples(
             s, additional_relations=additional_relations, stopwords=stopwords
@@ -462,13 +461,12 @@ def get_text_relations(
 
 def cluster(
     sentences,
-    stopwords,
     w2v_model,
     min_cluster_size=50,
     max_cluster_size=150,
     cluster_size_step=10,
 ):
-    X = np.array([get_sentence_vector(s, stopwords, w2v_model) for s in sentences])
+    X = np.array([get_sentence_vector(s, w2v_model) for s in sentences])
     max_sil_score = -1
     res_labels = None
     n_sentences = len(sentences)
@@ -483,8 +481,7 @@ def cluster(
     return res_labels
 
 
-def get_sentence_vector(sentence, stopwords, w2v_model):
-    # TODO stopword are not in use for now
+def get_sentence_vector(sentence, w2v_model):
     vector = np.zeros(300)
     count = 0
     for word in sentence.words:
