@@ -336,8 +336,6 @@ class RelGraph:
             )
 
     def _add_edge(self, source, target, label, description):
-        if source not in self._graph or target not in self._graph:
-            return
         if not self._graph.has_edge(source, target):
             if label == "выше":
                 self._graph.add_edge(
@@ -361,17 +359,17 @@ class RelGraph:
                 self._graph.add_edge(
                     source, target, label=label, description=description, weight=1
                 )
-            return
-        # this edge already exists
-        if label not in self._graph[source][target]["label"].split(" | "):
-            self._graph[source][target]["label"] = "{} | {}".format(
-                self._graph[source][target]["label"], label
-            )
-        if description not in self._graph[source][target]["description"].split(" | "):
-            self._graph[source][target]["description"] = "{} | {}".format(
-                self._graph[source][target]["description"], description
-            )
-        self._graph[source][target]["weight"] += 1
+        else:
+            # this edge already exists
+            if label not in self._graph[source][target]["label"].split(" | "):
+                self._graph[source][target]["label"] = "{} | {}".format(
+                    self._graph[source][target]["label"], label
+                )
+            if description not in self._graph[source][target]["description"].split(" | "):
+                self._graph[source][target]["description"] = "{} | {}".format(
+                    self._graph[source][target]["description"], description
+                )
+            self._graph[source][target]["weight"] += 1
 
     def _add_node(self, name, description, label=None, type_=0):
         if label is None:
@@ -380,13 +378,13 @@ class RelGraph:
             self._graph.add_node(
                 name, label=label, description=description, weight=1, feat_type=type_
             )
-            return
-        # this node already exists
-        if description not in self._graph.nodes[name]["description"].split(" | "):
-            self._graph.nodes[name]["description"] = "{} | {}".format(
-                self._graph.nodes[name]["description"], description
-            )
-        self._graph.nodes[name]["weight"] += 1
+        else:
+            # this node already exists
+            if description not in self._graph.nodes[name]["description"].split(" | "):
+                self._graph.nodes[name]["description"] = "{} | {}".format(
+                    self._graph.nodes[name]["description"], description
+                )
+            self._graph.nodes[name]["weight"] += 1
 
     def save(self, path):
         stream_buffer = io.BytesIO()
