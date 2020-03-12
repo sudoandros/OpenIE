@@ -365,7 +365,9 @@ class RelGraph:
                 self._graph[source][target]["label"] = "{} | {}".format(
                     self._graph[source][target]["label"], label
                 )
-            if description not in self._graph[source][target]["description"].split(" | "):
+            if description not in self._graph[source][target]["description"].split(
+                " | "
+            ):
                 self._graph[source][target]["description"] = "{} | {}".format(
                     self._graph[source][target]["description"], description
                 )
@@ -385,6 +387,24 @@ class RelGraph:
                     self._graph.nodes[name]["description"], description
                 )
             self._graph.nodes[name]["weight"] += 1
+
+    def _find_targets(self, source, edge_label):
+        return [
+            target
+            for target in self._graph.successors(source)
+            if self._graph.edges[source, target]["label"] == edge_label
+            and self._graph.nodes[source]["feat_type"]
+            == self._graph.nodes[target]["feat_type"]
+        ]
+
+    def _find_sources(self, edge_label, target):
+        return [
+            source
+            for source in self._graph.predecessors(target)
+            if self._graph.edges[source, target]["label"] == edge_label
+            and self._graph.nodes[source]["feat_type"]
+            == self._graph.nodes[target]["feat_type"]
+        ]
 
     def save(self, path):
         stream_buffer = io.BytesIO()
