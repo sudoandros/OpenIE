@@ -332,10 +332,24 @@ class RelGraph:
                 right_arg_lemmatized, sentence_text, label=right_arg, type_=cluster
             )
             self._add_edge(
-                left_arg_lemmatized, right_arg_lemmatized, relation, sentence_text
+                left_arg_lemmatized,
+                right_arg_lemmatized,
+                relation,
+                sentence_text,
+                merge_nodes=True,
             )
 
-    def _add_edge(self, source, target, label, description):
+    def _add_edge(
+        self, source, target, label, description, weight=1, merge_nodes=False
+    ):
+        if merge_nodes:
+            sources_to_merge = self._find_sources_to_merge(label, target)
+            targets_to_merge = self._find_targets_to_merge(source, label)
+            if len(sources_to_merge) > 1:
+                self._merge_nodes(sources_to_merge)
+            if len(targets_to_merge) > 1:
+                self._merge_nodes(targets_to_merge)
+
         if not self._graph.has_edge(source, target):
             if label == "выше":
                 self._graph.add_edge(
@@ -343,7 +357,7 @@ class RelGraph:
                     target,
                     label=label,
                     description=description,
-                    weight=1,
+                    weight=weight,
                     viz={"color": {"b": 255, "g": 0, "r": 0}},
                 )
             elif label == "часть":
@@ -352,12 +366,12 @@ class RelGraph:
                     target,
                     label=label,
                     description=description,
-                    weight=1,
+                    weight=weight,
                     viz={"color": {"b": 0, "g": 255, "r": 0}},
                 )
             else:
                 self._graph.add_edge(
-                    source, target, label=label, description=description, weight=1
+                    source, target, label=label, description=description, weight=weight
                 )
         else:
             # this edge already exists
@@ -371,14 +385,18 @@ class RelGraph:
                 self._graph[source][target]["description"] = "{} | {}".format(
                     self._graph[source][target]["description"], description
                 )
-            self._graph[source][target]["weight"] += 1
+            self._graph[source][target]["weight"] += weight
 
-    def _add_node(self, name, description, label=None, type_=0):
+    def _add_node(self, name, description, label=None, weight=1, type_=0):
         if label is None:
             label = name
         if name not in self._graph:
             self._graph.add_node(
-                name, label=label, description=description, weight=1, feat_type=type_
+                name,
+                label=label,
+                description=description,
+                weight=weight,
+                feat_type=type_,
             )
         else:
             # this node already exists
@@ -386,9 +404,9 @@ class RelGraph:
                 self._graph.nodes[name]["description"] = "{} | {}".format(
                     self._graph.nodes[name]["description"], description
                 )
-            self._graph.nodes[name]["weight"] += 1
+            self._graph.nodes[name]["weight"] += weight
 
-    def _find_targets(self, source, edge_label):
+    def _find_targets_to_merge(self, source, edge_label):
         return [
             target
             for target in self._graph.successors(source)
@@ -397,7 +415,7 @@ class RelGraph:
             == self._graph.nodes[target]["feat_type"]
         ]
 
-    def _find_sources(self, edge_label, target):
+    def _find_sources_to_merge(self, edge_label, target):
         return [
             source
             for source in self._graph.predecessors(target)
@@ -405,6 +423,51 @@ class RelGraph:
             and self._graph.nodes[source]["feat_type"]
             == self._graph.nodes[target]["feat_type"]
         ]
+
+    def _merge_nodes(self, nodes):
+        for node1 in nodes:
+            for node2 in nodes:
+                if node1 != node2 and self._graph.has_edge(node1, node2):
+                    return
+
+        main_node, *other_nodes = sorted(
+            nodes,
+            key=lambda node: (self._graph.nodes[node]["weight"], node),
+            reverse=True,
+        )
+
+        for node in other_nodes:
+            self._add_node(
+                main_node,
+                self._graph.nodes[node]["description"],
+                label=self._graph.nodes[node]["label"],
+                weight=self._graph.nodes[node]["weight"],
+                type_=self._graph.nodes[node]["feat_type"],
+            )
+        self._graph.nodes[main_node]["label"] = "__ {} __".format(
+            self._graph.nodes[main_node]["label"]
+        )
+
+        for source, target in self._graph.edges(other_nodes):
+            if source in other_nodes:  # "out" edge
+                self._add_edge(
+                    main_node,
+                    target,
+                    self._graph.edges[source, target]["label"],
+                    self._graph.edges[source, target]["description"],
+                    weight=self._graph.edges[source, target]["weight"],
+                )
+            elif target in other_nodes:  # "in" edge
+                self._add_edge(
+                    source,
+                    main_node,
+                    self._graph.edges[source, target]["label"],
+                    self._graph.edges[source, target]["description"],
+                    weight=self._graph.edges[source, target]["weight"],
+                )
+
+        for node in other_nodes:
+            self._graph.remove_node(node)
 
     def save(self, path):
         stream_buffer = io.BytesIO()
