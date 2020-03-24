@@ -332,24 +332,31 @@ class RelGraph:
                 right_arg_lemmatized, sentence_text, label=right_arg, type_=cluster
             )
             self._add_edge(
-                left_arg_lemmatized,
-                right_arg_lemmatized,
-                relation,
-                sentence_text,
-                merge_nodes=True,
+                left_arg_lemmatized, right_arg_lemmatized, relation, sentence_text
             )
 
-    def _add_edge(
-        self, source, target, label, description, weight=1, merge_nodes=False
-    ):
-        if merge_nodes:
-            sources_to_merge = self._find_sources_to_merge(label, target)
-            targets_to_merge = self._find_targets_to_merge(source, label)
-            if len(sources_to_merge) > 1:
-                self._merge_nodes(sources_to_merge)
-            if len(targets_to_merge) > 1:
-                self._merge_nodes(targets_to_merge)
+    def merge_same_nodes(self):
+        while True:
+            nodes_to_merge = None
+            for source, target in self._graph.edges:
+                targets_to_merge = self._find_targets_to_merge(
+                    source, self._graph.edges[source, target]["label"]
+                )
+                if len(targets_to_merge) > 1:
+                    nodes_to_merge = targets_to_merge
+                    break
 
+                sources_to_merge = self._find_sources_to_merge(
+                    self._graph.edges[source, target]["label"], target
+                )
+                if len(sources_to_merge) > 1:
+                    nodes_to_merge = sources_to_merge
+                    break
+            else:
+                break
+            self._merge_nodes(nodes_to_merge)
+
+    def _add_edge(self, source, target, label, description, weight=1):
         if not self._graph.has_edge(source, target):
             if label == "выше":
                 self._graph.add_edge(
@@ -407,29 +414,36 @@ class RelGraph:
             self._graph.nodes[name]["weight"] += weight
 
     def _find_targets_to_merge(self, source, edge_label):
-        return [
+        res = {
             target
             for target in self._graph.successors(source)
             if self._graph.edges[source, target]["label"] == edge_label
             and self._graph.nodes[source]["feat_type"]
             == self._graph.nodes[target]["feat_type"]
-        ]
+        }
+        for node1 in res.copy():
+            for node2 in res.copy():
+                if node1 != node2 and self._graph.has_edge(node1, node2):
+                    res.discard(node1)
+                    res.discard(node2)
+        return res
 
     def _find_sources_to_merge(self, edge_label, target):
-        return [
+        res = {
             source
             for source in self._graph.predecessors(target)
             if self._graph.edges[source, target]["label"] == edge_label
             and self._graph.nodes[source]["feat_type"]
             == self._graph.nodes[target]["feat_type"]
-        ]
+        }
+        for node1 in res.copy():
+            for node2 in res.copy():
+                if node1 != node2 and self._graph.has_edge(node1, node2):
+                    res.discard(node1)
+                    res.discard(node2)
+        return res
 
     def _merge_nodes(self, nodes):
-        for node1 in nodes:
-            for node2 in nodes:
-                if node1 != node2 and self._graph.has_edge(node1, node2):
-                    return
-
         main_node, *other_nodes = sorted(
             nodes,
             key=lambda node: (self._graph.nodes[node]["weight"], node),
@@ -444,8 +458,9 @@ class RelGraph:
                 weight=self._graph.nodes[node]["weight"],
                 type_=self._graph.nodes[node]["feat_type"],
             )
-        self._graph.nodes[main_node]["label"] = "__ {} __".format(
-            self._graph.nodes[main_node]["label"]
+        self._graph.nodes[main_node]["label"] = " | ".join(
+            [self._graph.nodes[main_node]["label"]]
+            + [self._graph.nodes[node]["label"] for node in other_nodes]
         )
 
         for source, target in self._graph.edges(other_nodes):
@@ -532,11 +547,11 @@ class TextReltuples:
         nodes_limit,
     ):
         sentences = udpipe_model.read(conllu, "conllu")
-        labels = self._cluster(sentences, w2v_model)
+        cluster_labels = self._cluster(sentences, w2v_model)
         self._reltuples = []
         self._dict = {}
         self._graph = RelGraph()
-        for s, lbl in zip(sentences, labels):
+        for s, lbl in zip(sentences, cluster_labels):
             sentence_reltuples = SentenceReltuples(
                 s, additional_relations=additional_relations, stopwords=stopwords
             )
@@ -547,6 +562,7 @@ class TextReltuples:
             ] = sentence_reltuples.string_tuples()
             if self._graph.nodes_number > nodes_limit:
                 break
+        self._graph.merge_same_nodes()
 
     @property
     def graph(self):
