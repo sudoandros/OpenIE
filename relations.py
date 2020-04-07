@@ -326,10 +326,10 @@ class RelGraph:
             sentence_reltuples.string_tuples(lemmatize_args=True),
         ):
             self._add_node(
-                left_arg_lemmatized, sentence_text, label=left_arg, type_=cluster
+                left_arg_lemmatized, sentence_text, label=left_arg, feat_type=cluster
             )
             self._add_node(
-                right_arg_lemmatized, sentence_text, label=right_arg, type_=cluster
+                right_arg_lemmatized, sentence_text, label=right_arg, feat_type=cluster
             )
             self._add_edge(
                 left_arg_lemmatized, right_arg_lemmatized, relation, sentence_text
@@ -394,7 +394,7 @@ class RelGraph:
                 )
             self._graph[source][target]["weight"] += weight
 
-    def _add_node(self, name, description, label=None, weight=1, type_=0):
+    def _add_node(self, name, description, label=None, weight=1, feat_type=0):
         if label is None:
             label = name
         if name not in self._graph:
@@ -403,13 +403,17 @@ class RelGraph:
                 label=label,
                 description=description,
                 weight=weight,
-                feat_type=type_,
+                feat_type=str(feat_type),
             )
         else:
             # this node already exists
             if description not in self._graph.nodes[name]["description"].split(" | "):
                 self._graph.nodes[name]["description"] = "{} | {}".format(
                     self._graph.nodes[name]["description"], description
+                )
+            if feat_type not in self._graph.nodes[name]["feat_type"].split(" | "):
+                self._graph.nodes[name]["feat_type"] = "{} | {}".format(
+                    self._graph.nodes[name]["feat_type"], feat_type
                 )
             self._graph.nodes[name]["weight"] += weight
 
@@ -418,8 +422,10 @@ class RelGraph:
             target
             for target in self._graph.successors(source)
             if self._graph.edges[source, target]["label"] == edge_label
-            and self._graph.nodes[source]["feat_type"]
-            == self._graph.nodes[target]["feat_type"]
+            and (
+                set(self._graph.nodes[source]["feat_type"].split(" | "))
+                & set(self._graph.nodes[target]["feat_type"].split(" | "))
+            )
         }
         for node1 in res.copy():
             for node2 in res.copy():
@@ -433,8 +439,10 @@ class RelGraph:
             source
             for source in self._graph.predecessors(target)
             if self._graph.edges[source, target]["label"] == edge_label
-            and self._graph.nodes[source]["feat_type"]
-            == self._graph.nodes[target]["feat_type"]
+            and (
+                set(self._graph.nodes[source]["feat_type"].split(" | "))
+                & set(self._graph.nodes[target]["feat_type"].split(" | "))
+            )
         }
         for node1 in res.copy():
             for node2 in res.copy():
@@ -456,7 +464,7 @@ class RelGraph:
                 self._graph.nodes[node]["description"],
                 label=self._graph.nodes[node]["label"],
                 weight=self._graph.nodes[node]["weight"],
-                type_=self._graph.nodes[node]["feat_type"],
+                feat_type=self._graph.nodes[node]["feat_type"],
             )
         self._graph.nodes[main_node]["label"] = " | ".join(
             [self._graph.nodes[main_node]["label"]]
