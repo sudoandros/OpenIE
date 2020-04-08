@@ -300,7 +300,7 @@ class SentenceReltuples:
 
 class RelGraph:
     def __init__(self):
-        self._graph = nx.DiGraph()
+        self._graph = nx.MultiDiGraph()
 
     @classmethod
     def from_reltuples_iter(cls, reltuples_iter):
@@ -338,17 +338,13 @@ class RelGraph:
     def merge_same_nodes(self):
         while True:
             nodes_to_merge = None
-            for source, target in self._graph.edges:
-                targets_to_merge = self._find_targets_to_merge(
-                    source, self._graph.edges[source, target]["label"]
-                )
+            for source, target, label in self._graph.edges:
+                targets_to_merge = self._find_targets_to_merge(source, label)
                 if len(targets_to_merge) > 1:
                     nodes_to_merge = targets_to_merge
                     break
 
-                sources_to_merge = self._find_sources_to_merge(
-                    self._graph.edges[source, target]["label"], target
-                )
+                sources_to_merge = self._find_sources_to_merge(label, target)
                 if len(sources_to_merge) > 1:
                     nodes_to_merge = sources_to_merge
                     break
@@ -357,11 +353,12 @@ class RelGraph:
             self._merge_nodes(nodes_to_merge)
 
     def _add_edge(self, source, target, label, description, weight=1):
-        if not self._graph.has_edge(source, target):
+        if not self._graph.has_edge(source, target, key=label):
             if label == "выше":
                 self._graph.add_edge(
                     source,
                     target,
+                    key=label,
                     label=label,
                     description=description,
                     weight=weight,
@@ -371,6 +368,7 @@ class RelGraph:
                 self._graph.add_edge(
                     source,
                     target,
+                    key=label,
                     label=label,
                     description=description,
                     weight=weight,
@@ -378,21 +376,22 @@ class RelGraph:
                 )
             else:
                 self._graph.add_edge(
-                    source, target, label=label, description=description, weight=weight
+                    source,
+                    target,
+                    key=label,
+                    label=label,
+                    description=description,
+                    weight=weight,
                 )
         else:
             # this edge already exists
-            if label not in self._graph[source][target]["label"].split(" | "):
-                self._graph[source][target]["label"] = "{} | {}".format(
-                    self._graph[source][target]["label"], label
+            if description not in self._graph[source][target][label][
+                "description"
+            ].split(" | "):
+                self._graph[source][target][label]["description"] = "{} | {}".format(
+                    self._graph[source][target][label]["description"], description
                 )
-            if description not in self._graph[source][target]["description"].split(
-                " | "
-            ):
-                self._graph[source][target]["description"] = "{} | {}".format(
-                    self._graph[source][target]["description"], description
-                )
-            self._graph[source][target]["weight"] += weight
+            self._graph[source][target][label]["weight"] += weight
 
     def _add_node(self, name, description, label=None, weight=1, feat_type=0):
         if label is None:
@@ -417,11 +416,11 @@ class RelGraph:
                 )
             self._graph.nodes[name]["weight"] += weight
 
-    def _find_targets_to_merge(self, source, edge_label):
+    def _find_targets_to_merge(self, source, label):
         res = {
             target
             for target in self._graph.successors(source)
-            if self._graph.edges[source, target]["label"] == edge_label
+            if self._graph.has_edge(source, target, key=label)
             and (
                 set(self._graph.nodes[source]["feat_type"].split(" | "))
                 & set(self._graph.nodes[target]["feat_type"].split(" | "))
@@ -434,11 +433,11 @@ class RelGraph:
                     res.discard(node2)
         return res
 
-    def _find_sources_to_merge(self, edge_label, target):
+    def _find_sources_to_merge(self, label, target):
         res = {
             source
             for source in self._graph.predecessors(target)
-            if self._graph.edges[source, target]["label"] == edge_label
+            if self._graph.has_edge(source, target, key=label)
             and (
                 set(self._graph.nodes[source]["feat_type"].split(" | "))
                 & set(self._graph.nodes[target]["feat_type"].split(" | "))
@@ -471,22 +470,22 @@ class RelGraph:
             + [self._graph.nodes[node]["label"] for node in other_nodes]
         )
 
-        for source, target in self._graph.edges(other_nodes):
+        for source, target, label in self._graph.edges(other_nodes, keys=True):
             if source in other_nodes:  # "out" edge
                 self._add_edge(
                     main_node,
                     target,
-                    self._graph.edges[source, target]["label"],
-                    self._graph.edges[source, target]["description"],
-                    weight=self._graph.edges[source, target]["weight"],
+                    label,
+                    self._graph.edges[source, target, label]["description"],
+                    weight=self._graph.edges[source, target, label]["weight"],
                 )
             elif target in other_nodes:  # "in" edge
                 self._add_edge(
                     source,
                     main_node,
-                    self._graph.edges[source, target]["label"],
-                    self._graph.edges[source, target]["description"],
-                    weight=self._graph.edges[source, target]["weight"],
+                    label,
+                    self._graph.edges[source, target, label]["description"],
+                    weight=self._graph.edges[source, target, label]["weight"],
                 )
 
         for node in other_nodes:
