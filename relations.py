@@ -397,12 +397,10 @@ class RelGraph:
                 )
         else:
             # this edge already exists
-            if description not in self._graph[source][target][key][
-                "description"
-            ].split(" | "):
-                self._graph[source][target][key]["description"] = "{} | {}".format(
-                    self._graph[source][target][key]["description"], description
-                )
+            self._graph[source][target][key]["description"] = " | ".join(
+                set(description.split(" | "))
+                | set(self._graph[source][target][key]["description"].split(" | "))
+            )
             self._graph[source][target][key]["weight"] += weight
 
     def _add_node(self, name, description, label=None, weight=1, feat_type=0):
@@ -418,14 +416,18 @@ class RelGraph:
             )
         else:
             # this node already exists
-            if description not in self._graph.nodes[name]["description"].split(" | "):
-                self._graph.nodes[name]["description"] = "{} | {}".format(
-                    self._graph.nodes[name]["description"], description
+            self._graph.nodes[name]["description"] = " | ".join(
+                set(description.split(" | "))
+                | set(self._graph.nodes[name]["description"].split(" | "))
+            )
+            self._graph.nodes[name]["feat_type"] = " | ".join(
+                (
+                    set(feat_type.split(" | "))
+                    if isinstance(feat_type, str)
+                    else {str(feat_type)}
                 )
-            if feat_type not in self._graph.nodes[name]["feat_type"].split(" | "):
-                self._graph.nodes[name]["feat_type"] = "{} | {}".format(
-                    self._graph.nodes[name]["feat_type"], feat_type
-                )
+                | set(self._graph.nodes[name]["feat_type"].split(" | "))
+            )
             self._graph.nodes[name]["weight"] += weight
 
     def _find_targets_to_merge(self, source, key):
