@@ -5,6 +5,7 @@ import string
 import sys
 import xml.etree.ElementTree as ET
 from collections import namedtuple
+from itertools import groupby
 from pathlib import Path
 
 import gensim.downloader
@@ -477,6 +478,37 @@ class RelGraph:
                     res.discard(node1)
                     res.discard(node2)
         return res
+
+    def _find_edges_to_merge(self, source, target):
+        keys = [
+            (key, cluster, attr["label"])
+            for _, _, key, attr in self._graph.out_edges(source, keys=True, data=True)
+            if self._graph.has_edge(source, target, key=key)
+            for cluster in set(attr["feat_type"].split(" | "))
+        ]
+
+        keys.sort(key=lambda elem: elem[1:])
+        cluster_group = []
+        for _, g_cluster in groupby(keys, key=lambda elem: elem[1]):
+            cluster_group = list(g_cluster)
+            if len(cluster_group) < 2:
+                continue
+            for _, g_label in groupby(cluster_group, key=lambda elem: elem[2]):
+                label_group = list(g_label)
+                if len(label_group) > 1:
+                    break
+            else:
+                break
+        else:
+            return []
+        keys = set(key for key, *_ in cluster_group)
+        cluster = cluster_group[0][1]
+
+        edges = set()
+        for s, t, key, feat_type in self._graph.edges(keys=True, data="feat_type"):
+            if key in keys and cluster in feat_type.split(" | "):
+                edges.add((s, t, key))
+        return edges
 
     def _merge_nodes(self, nodes):
         main_node, *other_nodes = sorted(
