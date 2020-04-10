@@ -341,9 +341,10 @@ class RelGraph:
                 relation,
                 right_deprel,
                 sentence_text,
+                feat_type=cluster,
             )
 
-    def merge_same_nodes(self):
+    def merge_relations(self):
         while True:
             nodes_to_merge = None
             for source, target, key in self._graph.edges:
@@ -360,7 +361,9 @@ class RelGraph:
                 break
             self._merge_nodes(nodes_to_merge)
 
-    def _add_edge(self, source, target, label, deprel, description, weight=1):
+    def _add_edge(
+        self, source, target, label, deprel, description, weight=1, feat_type=0
+    ):
         key = "{} + {}".format(label, deprel)
         if not self._graph.has_edge(source, target, key=key):
             if label == "выше":
@@ -372,6 +375,7 @@ class RelGraph:
                     deprel=deprel,
                     description=description,
                     weight=weight,
+                    feat_type=str(feat_type),
                     viz={"color": {"b": 255, "g": 0, "r": 0}},
                 )
             elif label == "часть":
@@ -383,6 +387,7 @@ class RelGraph:
                     deprel=deprel,
                     description=description,
                     weight=weight,
+                    feat_type=str(feat_type),
                     viz={"color": {"b": 0, "g": 255, "r": 0}},
                 )
             else:
@@ -394,12 +399,21 @@ class RelGraph:
                     deprel=deprel,
                     description=description,
                     weight=weight,
+                    feat_type=str(feat_type),
                 )
         else:
             # this edge already exists
             self._graph[source][target][key]["description"] = " | ".join(
                 set(description.split(" | "))
                 | set(self._graph[source][target][key]["description"].split(" | "))
+            )
+            self._graph[source][target][key]["feat_type"] = " | ".join(
+                (
+                    set(feat_type.split(" | "))
+                    if isinstance(feat_type, str)
+                    else {str(feat_type)}
+                )
+                | set(self._graph[source][target][key]["feat_type"].split(" | "))
             )
             self._graph[source][target][key]["weight"] += weight
 
@@ -585,7 +599,7 @@ class TextReltuples:
             ] = sentence_reltuples.string_tuples()
             if self._graph.nodes_number > nodes_limit:
                 break
-        self._graph.merge_same_nodes()
+        self._graph.merge_relations()
 
     @property
     def graph(self):
