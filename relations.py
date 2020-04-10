@@ -5,6 +5,7 @@ import string
 import sys
 import xml.etree.ElementTree as ET
 from collections import namedtuple
+from functools import reduce
 from itertools import groupby
 from pathlib import Path
 
@@ -347,7 +348,9 @@ class RelGraph:
 
     def merge_relations(self):
         while True:
-            nodes_to_merge = None
+            nodes_to_merge = []
+            edges_to_merge = []
+
             for source, target, key in self._graph.edges:
                 targets_to_merge = self._find_targets_to_merge(source, key)
                 if len(targets_to_merge) > 1:
@@ -358,9 +361,17 @@ class RelGraph:
                 if len(sources_to_merge) > 1:
                     nodes_to_merge = sources_to_merge
                     break
+
+                edges_to_merge = self._find_edges_to_merge(source, target)
+                if len(edges_to_merge) > 1:
+                    break
+
+            if len(nodes_to_merge) > 1:
+                self._merge_nodes(nodes_to_merge)
+            elif len(edges_to_merge) > 1:
+                self._merge_edges(edges_to_merge)
             else:
                 break
-            self._merge_nodes(nodes_to_merge)
 
     def _add_edge(
         self, source, target, label, deprel, description, weight=1, feat_type=0
@@ -552,6 +563,61 @@ class RelGraph:
 
         for node in other_nodes:
             self._graph.remove_node(node)
+
+    def _merge_edges(self, edges):
+        new_label = " | ".join(
+            reduce(
+                lambda x, y: x | y,
+                (
+                    set(self._graph[source][target][key]["label"].split(" | "))
+                    for source, target, key in edges
+                ),
+            )
+        )
+        new_deprel = " | ".join(
+            reduce(
+                lambda x, y: x | y,
+                (
+                    set(self._graph[source][target][key]["deprel"].split(" | "))
+                    for source, target, key in edges
+                ),
+            )
+        )
+        new_description = " | ".join(
+            reduce(
+                lambda x, y: x | y,
+                (
+                    set(self._graph[source][target][key]["description"].split(" | "))
+                    for source, target, key in edges
+                ),
+            )
+        )
+        new_weight = sum(
+            {
+                self._graph[source][target][key]["weight"]
+                for source, target, key in edges
+            }
+        )
+        new_feat_type = " | ".join(
+            reduce(
+                lambda x, y: x | y,
+                (
+                    set(self._graph[source][target][key]["feat_type"].split(" | "))
+                    for source, target, key in edges
+                ),
+            )
+        )
+        for source, target, key in edges:
+            self._add_edge(
+                source,
+                target,
+                new_label,
+                new_deprel,
+                new_description,
+                weight=new_weight,
+                feat_type=new_feat_type,
+            )
+            self._graph.remove_edge(source, target, key=key)
 
     def save(self, path):
         stream_buffer = io.BytesIO()
