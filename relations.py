@@ -13,8 +13,10 @@ import gensim.downloader
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+from scipy.spatial import distance
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
+from sklearn.neighbors import LocalOutlierFactor
 from tqdm import tqdm
 
 from udpipe_model import UDPipeModel
@@ -343,12 +345,14 @@ class RelGraph:
                 reltuple.left_arg_lemmas,
                 sentence_text,
                 label=reltuple.left_arg,
+                vector=reltuple.left_w2v,
                 feat_type=cluster,
             )
             self._add_node(
                 reltuple.right_arg_lemmas,
                 sentence_text,
                 label=reltuple.right_arg,
+                vector=reltuple.right_w2v,
                 feat_type=cluster,
             )
             self._add_edge(
@@ -366,12 +370,12 @@ class RelGraph:
             edges_to_merge = []
 
             for source, target, key in self._graph.edges:
-                targets_to_merge = self._find_targets_to_merge(source, key)
+                targets_to_merge = self._find_nodes_to_merge(source=source, key=key)
                 if len(targets_to_merge) > 1:
                     nodes_to_merge = targets_to_merge
                     break
 
-                sources_to_merge = self._find_sources_to_merge(key, target)
+                sources_to_merge = self._find_nodes_to_merge(target=target, key=key)
                 if len(sources_to_merge) > 1:
                     nodes_to_merge = sources_to_merge
                     break
@@ -443,7 +447,9 @@ class RelGraph:
             )
             self._graph[source][target][key]["weight"] += weight
 
-    def _add_node(self, name, description, label=None, weight=1, feat_type=0):
+    def _add_node(
+        self, name, description, label=None, weight=1, vector=None, feat_type=0
+    ):
         if label is None:
             label = name
         if name not in self._graph:
@@ -452,6 +458,7 @@ class RelGraph:
                 label=label,
                 description=description,
                 weight=weight,
+                vector=vector,
                 feat_type=str(feat_type),
             )
         else:
@@ -468,42 +475,64 @@ class RelGraph:
                 )
                 | set(self._graph.nodes[name]["feat_type"].split(" | "))
             )
+            self._graph.nodes[name]["vector"] = (
+                self._graph.nodes[name]["weight"] * self._graph.nodes[name]["vector"]
+                + vector * weight
+            ) / 2
             self._graph.nodes[name]["weight"] += weight
 
-    def _find_targets_to_merge(self, source, key):
-        res = {
-            target
-            for target in self._graph.successors(source)
-            if self._graph.has_edge(source, target, key=key)
-            and self._graph[source][target][key]["label"] not in ["выше", "часть"]
-            and (
-                set(self._graph.nodes[source]["feat_type"].split(" | "))
-                & set(self._graph.nodes[target]["feat_type"].split(" | "))
-            )
-        }
-        for node1 in res.copy():
-            for node2 in res.copy():
-                if node1 != node2 and self._graph.has_edge(node1, node2):
-                    res.discard(node1)
-                    res.discard(node2)
-        return res
+    def _find_nodes_to_merge(self, source=None, target=None, key=None):
+        if source is not None and key is not None:
+            res = {
+                target
+                for target in self._graph.successors(source)
+                if self._graph.has_edge(source, target, key=key)
+                and self._graph[source][target][key]["label"] not in ["выше", "часть"]
+                and (
+                    set(self._graph.nodes[source]["feat_type"].split(" | "))
+                    & set(self._graph.nodes[target]["feat_type"].split(" | "))
+                )
+            }
+        elif target is not None and key is not None:
+            res = {
+                source
+                for source in self._graph.predecessors(target)
+                if self._graph.has_edge(source, target, key=key)
+                and self._graph[source][target][key]["label"] not in ["выше", "часть"]
+                and (
+                    set(self._graph.nodes[source]["feat_type"].split(" | "))
+                    & set(self._graph.nodes[target]["feat_type"].split(" | "))
+                )
+            }
+        else:
+            raise ValueError("Wrong set of specified argumuments")
 
-    def _find_sources_to_merge(self, key, target):
-        res = {
-            source
-            for source in self._graph.predecessors(target)
-            if self._graph.has_edge(source, target, key=key)
-            and self._graph[source][target][key]["label"] not in ["выше", "часть"]
-            and (
-                set(self._graph.nodes[source]["feat_type"].split(" | "))
-                & set(self._graph.nodes[target]["feat_type"].split(" | "))
-            )
-        }
+        if len(res) < 2:
+            return res
+
         for node1 in res.copy():
             for node2 in res.copy():
                 if node1 != node2 and self._graph.has_edge(node1, node2):
                     res.discard(node1)
                     res.discard(node2)
+
+        if len(res) < 2:
+            return res
+
+        main_node, *other_nodes = sorted(
+            res,
+            key=lambda node: (self._graph.nodes[node]["weight"], node),
+            reverse=True,
+        )
+        for node in other_nodes:
+            if (
+                distance.cosine(
+                    self._graph.nodes[main_node]["vector"],
+                    self._graph.nodes[node]["vector"],
+                )
+                > 0.6
+            ):
+                res.discard(node)
         return res
 
     def _find_edges_to_merge(self, source, target):
@@ -551,6 +580,7 @@ class RelGraph:
                 self._graph.nodes[node]["description"],
                 label=self._graph.nodes[node]["label"],
                 weight=self._graph.nodes[node]["weight"],
+                vector=self._graph.nodes[node]["vector"],
                 feat_type=self._graph.nodes[node]["feat_type"],
             )
         self._graph.nodes[main_node]["label"] = " | ".join(
@@ -637,6 +667,8 @@ class RelGraph:
             self._graph.remove_edge(source, target, key=key)
 
     def save(self, path):
+        for node in self._graph:
+            self._graph.nodes[node]["vector"] = str(self._graph.nodes[node]["vector"])
         stream_buffer = io.BytesIO()
         nx.write_gexf(self._graph, stream_buffer, encoding="utf-8", version="1.1draft")
         xml_string = stream_buffer.getvalue().decode("utf-8")
