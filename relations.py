@@ -19,27 +19,50 @@ from tqdm import tqdm
 
 from udpipe_model import UDPipeModel
 
-Reltuple = namedtuple("Reltuple", ["left_arg", "relation", "right_deprel", "right_arg"])
+Reltuple = namedtuple(
+    "Reltuple",
+    [
+        "left_arg",
+        "left_arg_lemmas",
+        "left_w2v",
+        "relation",
+        "right_arg",
+        "right_arg_lemmas",
+        "right_deprel",
+        "right_w2v",
+    ],
+)
 
 
 class SentenceReltuples:
-    def __init__(self, sentence, additional_relations=False, stopwords=[]):
+    def __init__(self, sentence, w2v_model, additional_relations=False, stopwords=[]):
         self.sentence = sentence
+        self.sentence_vector = _get_phrase_vector(sentence, "all", w2v_model)
         self._stopwords = set(stopwords)
         self._reltuples = self._get_reltuples(additional_relations=additional_relations)
-
-    def string_tuples(self, lemmatize_args=False):
-        return [
-            self._to_string_tuple(reltuple, lemmatize_args=lemmatize_args)
-            for reltuple in self._reltuples
+        self.tuples = [
+            self._to_tuple(reltuple, w2v_model) for reltuple in self._reltuples
         ]
 
-    def _to_string_tuple(self, reltuple, lemmatize_args=False):
-        left_arg = self._arg_to_string(reltuple[0], lemmatized=lemmatize_args)
+    def _to_tuple(self, reltuple, w2v_model):
+        left_arg = self._arg_to_string(reltuple[0], lemmatized=False)
+        left_arg_lemmas = self._arg_to_string(reltuple[0], lemmatized=True)
+        left_w2v = _get_phrase_vector(self.sentence, reltuple[0], w2v_model)
         relation = self._relation_to_string(reltuple[1])
-        right_arg = self._arg_to_string(reltuple[2], lemmatized=lemmatize_args)
+        right_arg = self._arg_to_string(reltuple[2], lemmatized=False)
+        right_arg_lemmas = self._arg_to_string(reltuple[2], lemmatized=True)
         right_deprel = self.sentence.words[self._get_root(reltuple[2]).id].deprel
-        return Reltuple(left_arg, relation, right_deprel, right_arg)
+        right_w2v = _get_phrase_vector(self.sentence, reltuple[2], w2v_model)
+        return Reltuple(
+            left_arg,
+            left_arg_lemmas,
+            left_w2v,
+            relation,
+            right_arg,
+            right_arg_lemmas,
+            right_deprel,
+            right_w2v,
+        )
 
     def _relation_to_string(self, relation):
         if isinstance(relation, list):
@@ -110,14 +133,8 @@ class SentenceReltuples:
         result = []
         root = self._get_root(words_ids)
         main_phrase_ids = words_ids
-        upper = (
-            "appos",
-            "flat",
-            "flat:foreign",
-            "flat:name",
-            "conj",
-        )
-        dependent = ("nmod",)
+        upper = ["appos", "flat", "flat:foreign", "flat:name", "conj"]
+        dependent = ["nmod"]
         children_ids = [id_ for id_ in words_ids if id_ in root.children]
         for child_id in children_ids:
             child = self.sentence.words[child_id]
@@ -321,24 +338,24 @@ class RelGraph:
 
     def add_sentence_reltuples(self, sentence_reltuples, cluster=0):
         sentence_text = sentence_reltuples.sentence.getText()
-        for (
-            (left_arg, relation, right_deprel, right_arg),
-            (left_arg_lemmatized, _, _, right_arg_lemmatized),
-        ) in zip(
-            sentence_reltuples.string_tuples(),
-            sentence_reltuples.string_tuples(lemmatize_args=True),
-        ):
+        for reltuple in sentence_reltuples.tuples:
             self._add_node(
-                left_arg_lemmatized, sentence_text, label=left_arg, feat_type=cluster
+                reltuple.left_arg_lemmas,
+                sentence_text,
+                label=reltuple.left_arg,
+                feat_type=cluster,
             )
             self._add_node(
-                right_arg_lemmatized, sentence_text, label=right_arg, feat_type=cluster
+                reltuple.right_arg_lemmas,
+                sentence_text,
+                label=reltuple.right_arg,
+                feat_type=cluster,
             )
             self._add_edge(
-                left_arg_lemmatized,
-                right_arg_lemmatized,
-                relation,
-                right_deprel,
+                reltuple.left_arg_lemmas,
+                reltuple.right_arg_lemmas,
+                reltuple.relation,
+                reltuple.right_deprel,
                 sentence_text,
                 feat_type=cluster,
             )
@@ -682,19 +699,26 @@ class TextReltuples:
         nodes_limit,
     ):
         sentences = udpipe_model.read(conllu, "conllu")
-        cluster_labels = self._cluster(sentences, w2v_model)
-        self._reltuples = []
+        self.sentences_reltuples = []
         self._dict = {}
         self._graph = RelGraph()
-        for s, lbl in zip(sentences, cluster_labels):
+        for s in sentences:
             sentence_reltuples = SentenceReltuples(
-                s, additional_relations=additional_relations, stopwords=stopwords
+                s,
+                w2v_model,
+                additional_relations=additional_relations,
+                stopwords=stopwords,
             )
-            self._reltuples.append(sentence_reltuples)
-            self._graph.add_sentence_reltuples(sentence_reltuples, cluster=lbl)
-            self._dict[
-                sentence_reltuples.sentence.getText()
-            ] = sentence_reltuples.string_tuples()
+            self.sentences_reltuples.append(sentence_reltuples)
+        cluster_labels = self._cluster(w2v_model)
+        for sentence_reltuples, cluster in zip(
+            self.sentences_reltuples, cluster_labels
+        ):
+            self._graph.add_sentence_reltuples(sentence_reltuples, cluster=cluster)
+            self._dict[sentence_reltuples.sentence.getText()] = [
+                (reltuple.left_arg, reltuple.relation, reltuple.right_arg)
+                for reltuple in sentence_reltuples.tuples
+            ]
             if self._graph.nodes_number > nodes_limit:
                 break
         self._graph.merge_relations()
@@ -708,16 +732,16 @@ class TextReltuples:
         return self._dict
 
     def _cluster(
-        self,
-        sentences,
-        w2v_model,
-        min_cluster_size=20,
-        max_cluster_size=100,
-        cluster_size_step=10,
+        self, w2v_model, min_cluster_size=20, max_cluster_size=100, cluster_size_step=10
     ):
-        X = np.array([self._get_sentence_vector(s, w2v_model) for s in sentences])
+        X = np.array(
+            [
+                sentence_reltuples.sentence_vector
+                for sentence_reltuples in self.sentences_reltuples
+            ]
+        )
         max_sil_score = -1
-        n_sentences = len(sentences)
+        n_sentences = len(self.sentences_reltuples)
         res_labels = [0] * n_sentences
         for cluster_size in range(
             min_cluster_size, max_cluster_size, cluster_size_step
@@ -733,21 +757,29 @@ class TextReltuples:
                 res_labels = kmeans.labels_
         return res_labels
 
-    def _get_sentence_vector(self, sentence, w2v_model):
-        vector = np.zeros(300)
-        count = 0
-        for word in sentence.words:
-            try:
-                vector = np.add(
-                    vector, w2v_model["{}_{}".format(word.lemma, word.upostag)]
-                )
-                count += 1
-            except KeyError:
-                continue
-        if count > 0:
-            return vector / count
-        else:
-            return vector
+
+def _get_phrase_vector(sentence, words_ids, w2v_model):
+    if words_ids == "all":
+        words_ids = range(len(sentence.words))
+    vector = np.zeros(300)
+    count = 0
+    for word_id in words_ids:
+        try:
+            vector = np.add(
+                vector,
+                w2v_model[
+                    "{}_{}".format(
+                        sentence.words[word_id].lemma, sentence.words[word_id].upostag
+                    )
+                ],
+            )
+            count += 1
+        except KeyError:
+            continue
+    if count > 0:
+        return vector / count
+    else:
+        return vector
 
 
 def build_dir_graph(
