@@ -115,9 +115,6 @@ class SentenceReltuples:
             "flat",
             "flat:foreign",
             "flat:name",
-            "nummod",
-            "nummod:entity",
-            "nummod:gov",
             "conj",
         )
         dependent = ("nmod",)
