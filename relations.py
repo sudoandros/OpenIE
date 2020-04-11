@@ -458,6 +458,7 @@ class RelGraph:
             target
             for target in self._graph.successors(source)
             if self._graph.has_edge(source, target, key=key)
+            and self._graph[source][target][key]["label"] not in ["выше", "часть"]
             and (
                 set(self._graph.nodes[source]["feat_type"].split(" | "))
                 & set(self._graph.nodes[target]["feat_type"].split(" | "))
@@ -475,6 +476,7 @@ class RelGraph:
             source
             for source in self._graph.predecessors(target)
             if self._graph.has_edge(source, target, key=key)
+            and self._graph[source][target][key]["label"] not in ["выше", "часть"]
             and (
                 set(self._graph.nodes[source]["feat_type"].split(" | "))
                 & set(self._graph.nodes[target]["feat_type"].split(" | "))
@@ -492,6 +494,7 @@ class RelGraph:
             (key, cluster, attr["label"])
             for _, _, key, attr in self._graph.out_edges(source, keys=True, data=True)
             if self._graph.has_edge(source, target, key=key)
+            and attr["label"] not in ["выше", "часть"]
             for cluster in set(attr["feat_type"].split(" | "))
         ]
 
