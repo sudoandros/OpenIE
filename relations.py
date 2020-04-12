@@ -133,29 +133,44 @@ class SentenceReltuples:
 
     def _get_additional_reltuples(self, words_ids):
         result = []
-        root = self._get_root(words_ids)
-        main_phrase_ids = words_ids
         upper = ["appos", "flat", "flat:foreign", "flat:name", "conj"]
         dependent = ["nmod"]
+        main_phrase_ids = words_ids
+        root = self._get_root(words_ids)
         children_ids = [id_ for id_ in words_ids if id_ in root.children]
+
         for child_id in children_ids:
             child = self.sentence.words[child_id]
-            descendants_ids = []
             if child.deprel in upper:
                 subtree = self._get_subtree(child)
                 descendants_ids = [id_ for id_ in words_ids if id_ in subtree]
                 result.append((descendants_ids, "выше", words_ids))
-            elif child.deprel in dependent:
+                result += self._get_additional_reltuples(descendants_ids)
+                main_phrase_ids = [
+                    id_ for id_ in main_phrase_ids if id_ not in descendants_ids
+                ]
+        if len(words_ids) != len(main_phrase_ids):  # found "upper" relation?
+            result.append((words_ids, "выше", main_phrase_ids))
+            result += self._get_additional_reltuples(main_phrase_ids)
+            return result
+
+        old_main_phrase_length = len(main_phrase_ids)
+        for child_id in children_ids:
+            child = self.sentence.words[child_id]
+            if child.deprel in dependent:
                 subtree = self._get_subtree(child)
                 descendants_ids = [id_ for id_ in words_ids if id_ in subtree]
                 result.append((descendants_ids, "часть", words_ids))
-            result += self._get_additional_reltuples(descendants_ids)
-            main_phrase_ids = [
-                id_ for id_ in main_phrase_ids if id_ not in descendants_ids
-            ]
-        if len(words_ids) != len(main_phrase_ids):
+                result += self._get_additional_reltuples(descendants_ids)
+                main_phrase_ids = [
+                    id_ for id_ in main_phrase_ids if id_ not in descendants_ids
+                ]
+        if old_main_phrase_length != len(
+            main_phrase_ids
+        ):  # found "dependent" relation?
             result.append((words_ids, "выше", main_phrase_ids))
-        if len(main_phrase_ids) > 1:
+            result += self._get_additional_reltuples(main_phrase_ids)
+        elif len(main_phrase_ids) > 1:
             result.append((main_phrase_ids, "выше", [root.id]))
         return result
 
@@ -505,7 +520,7 @@ class RelGraph:
                 )
             }
         else:
-            raise ValueError("Wrong set of specified argumuments")
+            raise ValueError("Wrong set of specified arguments")
 
         if len(res) < 2:
             return res
