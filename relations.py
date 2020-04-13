@@ -77,9 +77,13 @@ class SentenceReltuples:
 
     def _arg_to_string(self, words_ids, lemmatized=False):
         if lemmatized:
-            string_ = " ".join(self.sentence.words[id_].lemma for id_ in words_ids)
+            string_ = " ".join(
+                self.sentence.words[id_].lemma.strip() for id_ in words_ids
+            )
         else:
-            string_ = " ".join(self.sentence.words[id_].form for id_ in words_ids)
+            string_ = " ".join(
+                self.sentence.words[id_].form.strip() for id_ in words_ids
+            )
         return self._clean_string(string_)
 
     def _clean_string(self, string_):
@@ -87,7 +91,7 @@ class SentenceReltuples:
             "".join(
                 char
                 for char in string_
-                if char.isalnum() or char.isspace() or char in ",.;-—/:%"
+                if char.isalnum() or char.isspace() or char in ",.;-—_/:%"
             )
             .lower()
             .strip(" .,:;-")
@@ -133,45 +137,45 @@ class SentenceReltuples:
 
     def _get_additional_reltuples(self, words_ids):
         result = []
-        upper = ["appos", "flat", "flat:foreign", "flat:name", "conj"]
-        dependent = ["nmod"]
+        is_a_deprels = ["appos", "flat", "flat:foreign", "flat:name", "conj"]
+        relates_to_deprels = ["nmod"]
         main_phrase_ids = words_ids
         root = self._get_root(words_ids)
         children_ids = [id_ for id_ in words_ids if id_ in root.children]
 
         for child_id in children_ids:
             child = self.sentence.words[child_id]
-            if child.deprel in upper:
+            if child.deprel in is_a_deprels:
                 subtree = self._get_subtree(child)
                 descendants_ids = [id_ for id_ in words_ids if id_ in subtree]
-                result.append((descendants_ids, "выше", words_ids))
+                result.append((words_ids, "_is_a_", descendants_ids))
                 result += self._get_additional_reltuples(descendants_ids)
                 main_phrase_ids = [
                     id_ for id_ in main_phrase_ids if id_ not in descendants_ids
                 ]
-        if len(words_ids) != len(main_phrase_ids):  # found "upper" relation?
-            result.append((words_ids, "выше", main_phrase_ids))
+        if len(words_ids) != len(main_phrase_ids):  # found "is_a" relation?
+            result.append((words_ids, "_is_a_", main_phrase_ids))
             result += self._get_additional_reltuples(main_phrase_ids)
             return result
 
         old_main_phrase_length = len(main_phrase_ids)
         for child_id in children_ids:
             child = self.sentence.words[child_id]
-            if child.deprel in dependent:
+            if child.deprel in relates_to_deprels:
                 subtree = self._get_subtree(child)
                 descendants_ids = [id_ for id_ in words_ids if id_ in subtree]
-                result.append((descendants_ids, "часть", words_ids))
+                result.append((words_ids, "_relates_to_", descendants_ids))
                 result += self._get_additional_reltuples(descendants_ids)
                 main_phrase_ids = [
                     id_ for id_ in main_phrase_ids if id_ not in descendants_ids
                 ]
         if old_main_phrase_length != len(
             main_phrase_ids
-        ):  # found "dependent" relation?
-            result.append((words_ids, "выше", main_phrase_ids))
+        ):  # found "relates_to" relation?
+            result.append((words_ids, "_is_a_", main_phrase_ids))
             result += self._get_additional_reltuples(main_phrase_ids)
         elif len(main_phrase_ids) > 1:
-            result.append((main_phrase_ids, "выше", [root.id]))
+            result.append((main_phrase_ids, "_is_a_", [root.id]))
         return result
 
     def _get_relation(self, word, right_arg=None):
@@ -411,7 +415,7 @@ class RelGraph:
     ):
         key = "{} + {}".format(label, deprel)
         if not self._graph.has_edge(source, target, key=key):
-            if label == "выше":
+            if label == "_is_a_":
                 self._graph.add_edge(
                     source,
                     target,
@@ -423,7 +427,7 @@ class RelGraph:
                     feat_type=str(feat_type),
                     viz={"color": {"b": 255, "g": 0, "r": 0}},
                 )
-            elif label == "часть":
+            elif label == "_relates_to_":
                 self._graph.add_edge(
                     source,
                     target,
@@ -502,7 +506,8 @@ class RelGraph:
                 target
                 for target in self._graph.successors(source)
                 if self._graph.has_edge(source, target, key=key)
-                and self._graph[source][target][key]["label"] not in ["выше", "часть"]
+                and self._graph[source][target][key]["label"]
+                not in ["_is_a_", "_relates_to_"]
                 and (
                     set(self._graph.nodes[source]["feat_type"].split(" | "))
                     & set(self._graph.nodes[target]["feat_type"].split(" | "))
@@ -513,7 +518,8 @@ class RelGraph:
                 source
                 for source in self._graph.predecessors(target)
                 if self._graph.has_edge(source, target, key=key)
-                and self._graph[source][target][key]["label"] not in ["выше", "часть"]
+                and self._graph[source][target][key]["label"]
+                not in ["_is_a_", "_relates_to_"]
                 and (
                     set(self._graph.nodes[source]["feat_type"].split(" | "))
                     & set(self._graph.nodes[target]["feat_type"].split(" | "))
@@ -555,7 +561,7 @@ class RelGraph:
             (key, cluster, attr["label"])
             for _, _, key, attr in self._graph.out_edges(source, keys=True, data=True)
             if self._graph.has_edge(source, target, key=key)
-            and attr["label"] not in ["выше", "часть"]
+            and attr["label"] not in ["_is_a_", "_relates_to_"]
             for cluster in set(attr["feat_type"].split(" | "))
         ]
 
