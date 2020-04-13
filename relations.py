@@ -618,6 +618,7 @@ class RelGraph:
                     self._graph.edges[source, target, key]["deprel"],
                     self._graph.edges[source, target, key]["description"],
                     weight=self._graph.edges[source, target, key]["weight"],
+                    feat_type=self._graph.edges[source, target, key]["feat_type"],
                 )
             elif target in other_nodes:  # "in" edge
                 self._add_edge(
@@ -627,6 +628,7 @@ class RelGraph:
                     self._graph.edges[source, target, key]["deprel"],
                     self._graph.edges[source, target, key]["description"],
                     weight=self._graph.edges[source, target, key]["weight"],
+                    feat_type=self._graph.edges[source, target, key]["feat_type"],
                 )
 
         for node in other_nodes:
@@ -688,6 +690,7 @@ class RelGraph:
             self._graph.remove_edge(source, target, key=key)
 
     def save(self, path):
+        self._filter_nodes()
         for node in self._graph:
             self._graph.nodes[node]["vector"] = str(self._graph.nodes[node]["vector"])
         stream_buffer = io.BytesIO()
@@ -698,6 +701,54 @@ class RelGraph:
         ET.register_namespace("", "http://www.gexf.net/1.1draft")
         xml_tree = ET.ElementTree(root_element)
         xml_tree.write(path, encoding="utf-8")
+
+    def _filter_nodes(self):
+        while True:
+            for node in self._graph:
+                if all(
+                    [
+                        self._graph.edges[source, target, key]["label"] == "_is_a_"
+                        or (
+                            self._graph.edges[source, target, key]["label"]
+                            == "_relates_to_"
+                        )
+                        for source, target, key in self._graph.out_edges(
+                            node, keys=True
+                        )
+                    ]
+                    + [
+                        self._graph.edges[source, target, key]["label"] == "_is_a_"
+                        or (
+                            self._graph.edges[source, target, key]["label"]
+                            == "_relates_to_"
+                        )
+                        for source, target, key in self._graph.in_edges(node, keys=True)
+                    ]
+                ):
+                    in_edges = list(self._graph.in_edges(node, keys=True))
+                    out_edges = list(self._graph.out_edges(node, keys=True))
+                    for pred, _, key_pred in in_edges:
+                        for _, succ, key_succ in out_edges:
+                            if (
+                                not self._graph[node][succ][key_succ]["label"]
+                                == self._graph[pred][node][key_pred]["label"]
+                            ):
+                                continue
+                            self._add_edge(
+                                pred,
+                                succ,
+                                self._graph[node][succ][key_succ]["label"],
+                                self._graph[node][succ][key_succ]["deprel"],
+                                self._graph[node][succ][key_succ]["description"],
+                                weight=self._graph[node][succ][key_succ]["weight"],
+                                feat_type=self._graph[node][succ][key_succ][
+                                    "feat_type"
+                                ],
+                            )
+                    self._graph.remove_node(node)
+                    break
+            else:
+                break
 
     def _fix_gexf(self, root_element):
         graph_node = root_element.find("{http://www.gexf.net/1.1draft}graph")
