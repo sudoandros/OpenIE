@@ -691,6 +691,7 @@ class RelGraph:
 
     def save(self, path):
         self._filter_nodes()
+        self._divide_multiedges()
         for node in self._graph:
             self._graph.nodes[node]["vector"] = str(self._graph.nodes[node]["vector"])
         stream_buffer = io.BytesIO()
@@ -746,6 +747,58 @@ class RelGraph:
                                 ],
                             )
                     self._graph.remove_node(node)
+                    break
+            else:
+                break
+
+    def _divide_multiedges(self):
+        dummy_count = 0
+        while True:
+            removed_edges = False
+            for source in self._graph:
+                for target in self._graph.successors(source):
+                    multiedges = [
+                        (s, t, k)
+                        for s, t, k in self._graph.out_edges(source, keys=True)
+                        if t == target
+                    ]
+                    if len(multiedges) < 2:
+                        continue
+
+                    for s, t, k in multiedges:
+                        dummy_name = "dummy{}".format(dummy_count)
+                        dummy_count += 1
+                        self._add_node(
+                            dummy_name,
+                            "Dummy node",
+                            label=dummy_name,
+                            weight=min(
+                                self._graph.nodes[source]["weight"],
+                                self._graph.nodes[target]["weight"],
+                            ),
+                        )
+                        self._add_edge(
+                            s,
+                            dummy_name,
+                            self._graph[s][t][k]["label"],
+                            self._graph[s][t][k]["deprel"],
+                            self._graph[s][t][k]["description"],
+                            weight=self._graph[s][t][k]["weight"],
+                            feat_type=self._graph[s][t][k]["feat_type"],
+                        )
+                        self._add_edge(
+                            dummy_name,
+                            t,
+                            self._graph[s][t][k]["label"],
+                            self._graph[s][t][k]["deprel"],
+                            self._graph[s][t][k]["description"],
+                            weight=self._graph[s][t][k]["weight"],
+                            feat_type=self._graph[s][t][k]["feat_type"],
+                        )
+                    self._graph.remove_edges_from(multiedges)
+                    removed_edges = True
+                    break
+                if removed_edges:
                     break
             else:
                 break
