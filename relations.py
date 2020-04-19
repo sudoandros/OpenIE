@@ -410,6 +410,10 @@ class RelGraph:
             else:
                 break
 
+    def filter_nodes(self, n_nodes_to_leave):
+        nodes_to_remove = self._find_nodes_to_remove(n_nodes_to_leave)
+        self._perform_filtering(nodes_to_remove)
+
     def _add_edge(
         self, source, target, label, deprel, description, weight=1, feat_type=0
     ):
@@ -690,7 +694,6 @@ class RelGraph:
             self._graph.remove_edge(source, target, key=key)
 
     def save(self, path):
-        self._filter_nodes(100)
         self._divide_multiedges()
         for node in self._graph:
             self._graph.nodes[node]["vector"] = str(self._graph.nodes[node]["vector"])
@@ -702,10 +705,6 @@ class RelGraph:
         ET.register_namespace("", "http://www.gexf.net/1.1draft")
         xml_tree = ET.ElementTree(root_element)
         xml_tree.write(path, encoding="utf-8")
-
-    def _filter_nodes(self, n_nodes_to_leave):
-        nodes_to_remove = self._find_nodes_to_remove(n_nodes_to_leave)
-        self._perform_filtering(nodes_to_remove)
 
     def _find_nodes_to_remove(self, n_nodes_to_leave):
         all_nodes = sorted(
@@ -897,9 +896,8 @@ class TextReltuples:
                 (reltuple.left_arg, reltuple.relation, reltuple.right_arg)
                 for reltuple in sentence_reltuples.tuples
             ]
-            if self._graph.nodes_number > nodes_limit:
-                break
         self._graph.merge_relations()
+        self._graph.filter_nodes(nodes_limit)
 
     @property
     def graph(self):
