@@ -690,7 +690,7 @@ class RelGraph:
             self._graph.remove_edge(source, target, key=key)
 
     def save(self, path):
-        self._filter_nodes()
+        self._filter_nodes(100)
         self._divide_multiedges()
         for node in self._graph:
             self._graph.nodes[node]["vector"] = str(self._graph.nodes[node]["vector"])
@@ -703,51 +703,72 @@ class RelGraph:
         xml_tree = ET.ElementTree(root_element)
         xml_tree.write(path, encoding="utf-8")
 
-    def _filter_nodes(self):
+    def _filter_nodes(self, n_nodes_to_leave):
+        nodes_to_remove = self._find_nodes_to_remove(n_nodes_to_leave)
+        self._perform_filtering(nodes_to_remove)
+
+    def _find_nodes_to_remove(self, n_nodes_to_leave):
+        all_nodes = sorted(
+            set(self._graph.nodes),
+            key=lambda node: self._graph.nodes[node]["weight"],
+            reverse=True,
+        )
+        nodes_to_leave = set(all_nodes[: min(n_nodes_to_leave, len(all_nodes))])
+        next_node_index = min(n_nodes_to_leave, len(all_nodes)) + 1
+
         while True:
-            for node in self._graph:
+            for node in nodes_to_leave:
                 if all(
                     [
-                        self._graph.edges[source, target, key]["label"] == "_is_a_"
-                        or (
-                            self._graph.edges[source, target, key]["label"]
-                            == "_relates_to_"
-                        )
+                        self._graph.edges[source, target, key]["label"]
+                        in ["_is_a_", "_relates_to_"]
                         for source, target, key in self._graph.out_edges(
                             node, keys=True
                         )
+                        if target in nodes_to_leave
                     ]
                     + [
-                        self._graph.edges[source, target, key]["label"] == "_is_a_"
-                        or (
-                            self._graph.edges[source, target, key]["label"]
-                            == "_relates_to_"
-                        )
+                        self._graph.edges[source, target, key]["label"]
+                        in ["_is_a_", "_relates_to_"]
                         for source, target, key in self._graph.in_edges(node, keys=True)
+                        if target in nodes_to_leave
                     ]
                 ):
-                    in_edges = list(self._graph.in_edges(node, keys=True))
-                    out_edges = list(self._graph.out_edges(node, keys=True))
-                    for pred, _, key_pred in in_edges:
-                        for _, succ, key_succ in out_edges:
-                            if (
-                                not self._graph[node][succ][key_succ]["label"]
-                                == self._graph[pred][node][key_pred]["label"]
-                            ):
-                                continue
-                            self._add_edge(
-                                pred,
-                                succ,
-                                self._graph[node][succ][key_succ]["label"],
-                                self._graph[node][succ][key_succ]["deprel"],
-                                self._graph[node][succ][key_succ]["description"],
-                                weight=self._graph[node][succ][key_succ]["weight"],
-                                feat_type=self._graph[node][succ][key_succ][
-                                    "feat_type"
-                                ],
-                            )
-                    self._graph.remove_node(node)
+                    nodes_to_leave.discard(node)
+                    if next_node_index < len(all_nodes):
+                        nodes_to_leave.add(all_nodes[next_node_index])
+                        next_node_index += 1
                     break
+            else:
+                break
+
+        return set(all_nodes) - set(nodes_to_leave)
+
+    def _perform_filtering(self, nodes_to_remove):
+        nodes_to_remove = set(nodes_to_remove)
+        while True:
+            for node in nodes_to_remove:
+                in_edges = list(self._graph.in_edges(node, keys=True))
+                out_edges = list(self._graph.out_edges(node, keys=True))
+                for pred, _, key_pred in in_edges:
+                    for _, succ, key_succ in out_edges:
+                        if (
+                            not self._graph[node][succ][key_succ]["label"]
+                            == self._graph[pred][node][key_pred]["label"]
+                        ):
+                            continue
+                        self._add_edge(
+                            pred,
+                            succ,
+                            self._graph[node][succ][key_succ]["label"],
+                            self._graph[node][succ][key_succ]["deprel"],
+                            self._graph[node][succ][key_succ]["description"],
+                            weight=self._graph[node][succ][key_succ]["weight"],
+                            feat_type=self._graph[node][succ][key_succ]["feat_type"],
+                        )
+                self._graph.remove_node(node)
+                nodes_to_remove.discard(node)
+                break
             else:
                 break
 
