@@ -41,10 +41,13 @@ class SentenceReltuples:
         self.sentence = sentence
         self.sentence_vector = _get_phrase_vector(sentence, "all", w2v_model)
         self._stopwords = set(stopwords)
-        self._reltuples = self._get_reltuples(additional_relations=additional_relations)
-        self.tuples = [
-            self._to_tuple(reltuple, w2v_model) for reltuple in self._reltuples
+        words_ids_tuples = self._get_words_ids_tuples(additional_relations=additional_relations)
+        self._reltuples = [
+            self._to_tuple(t, w2v_model) for t in words_ids_tuples
         ]
+
+    def __getitem__(self, key):
+        return self._reltuples[key]
 
     def _to_tuple(self, reltuple, w2v_model):
         left_arg = self._arg_to_string(reltuple[0], lemmatized=False)
@@ -98,7 +101,7 @@ class SentenceReltuples:
         )
         return res
 
-    def _get_reltuples(self, additional_relations=False):
+    def _get_words_ids_tuples(self, additional_relations=False):
         result = []
         for word in self.sentence.words:
             if word.deprel == "cop":
@@ -359,7 +362,7 @@ class RelGraph:
 
     def add_sentence_reltuples(self, sentence_reltuples, cluster=0):
         sentence_text = sentence_reltuples.sentence.getText()
-        for reltuple in sentence_reltuples.tuples:
+        for reltuple in sentence_reltuples:
             self._add_node(
                 reltuple.left_arg_lemmas,
                 sentence_text,
@@ -894,7 +897,7 @@ class TextReltuples:
             self._graph.add_sentence_reltuples(sentence_reltuples, cluster=cluster)
             self._dict[sentence_reltuples.sentence.getText()] = [
                 (reltuple.left_arg, reltuple.relation, reltuple.right_arg)
-                for reltuple in sentence_reltuples.tuples
+                for reltuple in sentence_reltuples
             ]
         self._graph.merge_relations()
         self._graph.filter_nodes(nodes_limit)
