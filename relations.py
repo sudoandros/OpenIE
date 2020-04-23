@@ -41,10 +41,10 @@ class SentenceReltuples:
         self.sentence = sentence
         self.sentence_vector = _get_phrase_vector(sentence, "all", w2v_model)
         self._stopwords = set(stopwords)
-        words_ids_tuples = self._get_words_ids_tuples(additional_relations=additional_relations)
-        self._reltuples = [
-            self._to_tuple(t, w2v_model) for t in words_ids_tuples
-        ]
+        words_ids_tuples = self._get_words_ids_tuples(
+            additional_relations=additional_relations
+        )
+        self._reltuples = [self._to_tuple(t, w2v_model) for t in words_ids_tuples]
 
     def __getitem__(self, key):
         return self._reltuples[key]
@@ -109,9 +109,11 @@ class SentenceReltuples:
             elif word.upostag == "VERB":
                 result += self._get_verb_reltuples(word)
         if additional_relations:
-            for left_arg, _, right_arg in result.copy():
-                result += self._get_additional_reltuples(left_arg)
-                result += self._get_additional_reltuples(right_arg)
+            args = {tuple(left_arg) for left_arg, _, _ in result} | {
+                tuple(right_arg) for _, _, right_arg in result
+            }
+            for arg in args:
+                result += self._get_additional_reltuples(list(arg))
         return [
             (left_arg, relation, right_arg)
             for left_arg, relation, right_arg in result
