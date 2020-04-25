@@ -45,6 +45,11 @@ class SentenceReltuples:
             additional_relations=additional_relations
         )
         self._reltuples = [self._to_tuple(t, w2v_model) for t in words_ids_tuples]
+        self._reltuples = [
+            reltuple
+            for reltuple in self._reltuples
+            if reltuple.left_arg != reltuple.right_arg
+        ]
 
     def __getitem__(self, key):
         return self._reltuples[key]
