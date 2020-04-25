@@ -427,7 +427,10 @@ class RelGraph:
     def _add_edge(
         self, source, target, label, deprel, description, weight=1, feat_type=0
     ):
-        key = "{} + {}".format(label, deprel)
+        if label in ["_is_a_", "_relates_to_"]:
+            key = label
+        else:
+            key = "{} + {}".format(label, deprel)
         if not self._graph.has_edge(source, target, key=key):
             if label == "_is_a_":
                 self._graph.add_edge(
