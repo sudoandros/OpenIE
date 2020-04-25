@@ -1,6 +1,7 @@
 import argparse
 import io
 import json
+import logging
 import string
 import sys
 import xml.etree.ElementTree as ET
@@ -50,6 +51,17 @@ class SentenceReltuples:
             for reltuple in self._reltuples
             if reltuple.left_arg != reltuple.right_arg
         ]
+        logging.info(
+            "{} relations were extracted from the sentence {}:\n".format(
+                len(self._reltuples), self.sentence.getText()
+            )
+            + "\n".join(
+                "({}, {}, {})".format(
+                    reltuple.left_arg, reltuple.relation, reltuple.right_arg
+                )
+                for reltuple in self._reltuples
+            )
+        )
 
     def __getitem__(self, key):
         return self._reltuples[key]
@@ -401,16 +413,66 @@ class RelGraph:
             for source, target, key in self._graph.edges:
                 targets_to_merge = self._find_nodes_to_merge(source=source, key=key)
                 if len(targets_to_merge) > 1:
+                    logging.info(
+                        "Found {} nodes to merge: \n".format(len(targets_to_merge))
+                        + "Position of nodes: right argument \n"
+                        + "Shared node: {} \n".format(
+                            self._graph.nodes[source]["label"]
+                        )
+                        + "Shared edge: {} \n".format(
+                            self._graph[source][next(iter(targets_to_merge))][key][
+                                "label"
+                            ]
+                        )
+                        + "Nodes: \n"
+                        + "\n".join(
+                            self._graph.nodes[node]["label"]
+                            for node in targets_to_merge
+                        )
+                    )
                     nodes_to_merge = targets_to_merge
                     break
 
                 sources_to_merge = self._find_nodes_to_merge(target=target, key=key)
                 if len(sources_to_merge) > 1:
+                    logging.info(
+                        "Found {} nodes to merge: \n".format(len(sources_to_merge))
+                        + "Position of nodes: left argument \n"
+                        + "Shared node: {} \n".format(
+                            self._graph.nodes[target]["label"]
+                        )
+                        + "Shared edge: {} \n".format(
+                            self._graph[next(iter(sources_to_merge))][target][key][
+                                "label"
+                            ]
+                        )
+                        + "Nodes: \n"
+                        + "\n".join(
+                            self._graph.nodes[node]["label"]
+                            for node in sources_to_merge
+                        )
+                    )
                     nodes_to_merge = sources_to_merge
                     break
 
                 edges_to_merge = self._find_edges_to_merge(source, target)
                 if len(edges_to_merge) > 1:
+                    logging.info(
+                        "Found {} edges to merge: \n".format(len(edges_to_merge))
+                        + "Shared left argument: {} \n".format(
+                            self._graph.nodes[source]["label"]
+                        )
+                        + "Shared right argument: {} \n".format(
+                            self._graph.nodes[target]["label"]
+                        )
+                        + "Edges: \n"
+                        + "\n".join(
+                            {
+                                self._graph[s][t][key]["label"]
+                                for s, t, key in edges_to_merge
+                            }
+                        )
+                    )
                     break
 
             if len(nodes_to_merge) > 1:
@@ -1001,6 +1063,11 @@ def build_dir_graph(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        handlers=[logging.FileHandler("logs/server.log", "a", "utf-8")],
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+    )
     parser = argparse.ArgumentParser()
     parser.add_argument("model_path", help="Path to the UDPipe model")
     parser.add_argument(

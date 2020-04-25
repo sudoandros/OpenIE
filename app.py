@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,6 +19,12 @@ from wtforms import BooleanField, IntegerField, MultipleFileField, SubmitField
 from relations import TextReltuples
 from syntax import parse_text
 from udpipe_model import UDPipeModel
+
+logging.basicConfig(
+    handlers=[logging.FileHandler("logs/server.log", "a", "utf-8")],
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s",
+)
 
 app = Flask(__name__)
 app.config.from_json("instance/config.json")
