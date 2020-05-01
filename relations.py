@@ -400,7 +400,7 @@ class RelGraph:
             self._graph.add_edge(left_arg_node, relation_node)
             self._graph.add_edge(relation_node, right_arg_node)
 
-    def merge_relations(self):
+    def merge_relations_old(self):
         while True:
             nodes_to_merge = []
             edges_to_merge = []
@@ -477,68 +477,30 @@ class RelGraph:
             else:
                 break
 
+    def merge_relations(self):
+        while True:
+            for node in self._graph:
+                if self._graph.nodes[node]["node_type"] == "relation":
+                    args_to_merge = self._find_args_to_merge(node)
+                    if len(args_to_merge) > 1:
+                        logging.info(
+                            "Found {} arguments to merge: \n".format(len(args_to_merge))
+                            + "\n".join(
+                                self._graph.nodes[node]["label"]
+                                for node in args_to_merge
+                            )
+                            + "Shared relation: {} \n".format(
+                                self._graph.nodes[node]["label"]
+                            )
+                        )
+                        self._merge_args(args_to_merge)
+                        break
+            else:
+                break
+
     def filter_nodes(self, n_nodes_to_leave):
         nodes_to_remove = self._find_nodes_to_remove(n_nodes_to_leave)
         self._perform_filtering(nodes_to_remove)
-
-    def _add_edge(
-        self, source, target, label, deprel, description, weight=1, feat_type=0
-    ):
-        if label in ["_is_a_", "_relates_to_"]:
-            key = label
-        else:
-            key = "{} + {}".format(label, deprel)
-        if not self._graph.has_edge(source, target, key=key):
-            if label == "_is_a_":
-                self._graph.add_edge(
-                    source,
-                    target,
-                    key=key,
-                    label=label,
-                    deprel=deprel,
-                    description=description,
-                    weight=weight,
-                    feat_type=str(feat_type),
-                    viz={"color": {"b": 255, "g": 0, "r": 0}},
-                )
-            elif label == "_relates_to_":
-                self._graph.add_edge(
-                    source,
-                    target,
-                    key=key,
-                    label=label,
-                    deprel=deprel,
-                    description=description,
-                    weight=weight,
-                    feat_type=str(feat_type),
-                    viz={"color": {"b": 0, "g": 255, "r": 0}},
-                )
-            else:
-                self._graph.add_edge(
-                    source,
-                    target,
-                    key=key,
-                    label=label,
-                    deprel=deprel,
-                    description=description,
-                    weight=weight,
-                    feat_type=str(feat_type),
-                )
-        else:
-            # this edge already exists
-            self._graph[source][target][key]["description"] = " | ".join(
-                set(description.split(" | "))
-                | set(self._graph[source][target][key]["description"].split(" | "))
-            )
-            self._graph[source][target][key]["feat_type"] = " | ".join(
-                (
-                    set(feat_type.split(" | "))
-                    if isinstance(feat_type, str)
-                    else {str(feat_type)}
-                )
-                | set(self._graph[source][target][key]["feat_type"].split(" | "))
-            )
-            self._graph[source][target][key]["weight"] += weight
 
     def _add_arg(
         self,
@@ -555,6 +517,7 @@ class RelGraph:
             self._graph.add_node(
                 name,
                 label=arg,
+                lemmas=arg_lemmas,
                 description=description,
                 weight=weight,
                 vector=vector,
@@ -596,6 +559,7 @@ class RelGraph:
                 weight=weight,
                 feat_type=feat_type,
                 viz=viz,
+                node_type="relation",
             )
         else:
             # this node already exists
@@ -606,40 +570,34 @@ class RelGraph:
             self._graph.nodes[name]["weight"] += weight
         return name
 
-    def _find_nodes_to_merge(self, source=None, target=None, key=None):
-        if source is not None and key is not None:
-            res = {
-                target
-                for target in self._graph.successors(source)
-                if self._graph.has_edge(source, target, key=key)
-                and self._graph[source][target][key]["label"]
-                not in ["_is_a_", "_relates_to_"]
-                and (
-                    set(self._graph.nodes[source]["feat_type"].split(" | "))
-                    & set(self._graph.nodes[target]["feat_type"].split(" | "))
-                )
-            }
-        elif target is not None and key is not None:
-            res = {
-                source
-                for source in self._graph.predecessors(target)
-                if self._graph.has_edge(source, target, key=key)
-                and self._graph[source][target][key]["label"]
-                not in ["_is_a_", "_relates_to_"]
-                and (
-                    set(self._graph.nodes[source]["feat_type"].split(" | "))
-                    & set(self._graph.nodes[target]["feat_type"].split(" | "))
-                )
-            }
-        else:
-            raise ValueError("Wrong set of specified arguments")
+    def _find_args_to_merge(self, relation_node):
+        res = {}
 
-        if len(res) < 2:
+        if relation_node in ["_is_a_", "_relates_to_"]:
+            return res
+
+        successors = set(self._graph.successors(relation_node))
+        predecessors = set(self._graph.predecessors(relation_node))
+        if len(successors) > 1:
+            res = successors
+        elif len(predecessors) > 1:
+            res = predecessors
+        else:
             return res
 
         for node1 in res.copy():
             for node2 in res.copy():
-                if node1 != node2 and self._graph.has_edge(node1, node2):
+                if (
+                    node1 != node2
+                    and (
+                        set(self._graph.successors(node1))
+                        & set(self._graph.predecessors(node2))
+                    )
+                    and (
+                        set(self._graph.predecessors(node1))
+                        & set(self._graph.successors(node2))
+                    )
+                ):
                     res.discard(node1)
                     res.discard(node2)
 
@@ -694,50 +652,44 @@ class RelGraph:
                 edges.add((s, t, key))
         return edges
 
-    def _merge_nodes(self, nodes):
+    def _merge_args(self, args_nodes):
         main_node, *other_nodes = sorted(
-            nodes,
+            args_nodes,
             key=lambda node: (self._graph.nodes[node]["weight"], node),
             reverse=True,
         )
 
-        for node in other_nodes:
-            self._add_node(
-                main_node,
+        new_label = " | ".join(
+            [self._graph.nodes[main_node]["label"]]
+            + [self._graph.nodes[node]["label"] for node in other_nodes]
+        )
+        new_lemmas = " | ".join(
+            [self._graph.nodes[main_node]["lemmas"]]
+            + [self._graph.nodes[node]["lemmas"] for node in other_nodes]
+        )
+        new_pred = reduce(
+            lambda x, y: x | y,
+            (set(self._graph.predecessors(node)) for node in args_nodes),
+        )
+        new_succ = reduce(
+            lambda x, y: x | y,
+            (set(self._graph.successors(node)) for node in args_nodes),
+        )
+        for node in args_nodes:
+            res_node = self._add_arg(
+                new_label,
+                new_lemmas,
                 self._graph.nodes[node]["description"],
-                label=self._graph.nodes[node]["label"],
                 weight=self._graph.nodes[node]["weight"],
                 vector=self._graph.nodes[node]["vector"],
                 feat_type=self._graph.nodes[node]["feat_type"],
             )
-        self._graph.nodes[main_node]["label"] = " | ".join(
-            [self._graph.nodes[main_node]["label"]]
-            + [self._graph.nodes[node]["label"] for node in other_nodes]
-        )
+        for node in new_pred:
+            self._graph.add_edge(node, res_node)
+        for node in new_succ:
+            self._graph.add_edge(res_node, node)
 
-        for source, target, key in self._graph.edges(other_nodes, keys=True):
-            if source in other_nodes:  # "out" edge
-                self._add_edge(
-                    main_node,
-                    target,
-                    self._graph.edges[source, target, key]["label"],
-                    self._graph.edges[source, target, key]["deprel"],
-                    self._graph.edges[source, target, key]["description"],
-                    weight=self._graph.edges[source, target, key]["weight"],
-                    feat_type=self._graph.edges[source, target, key]["feat_type"],
-                )
-            elif target in other_nodes:  # "in" edge
-                self._add_edge(
-                    source,
-                    main_node,
-                    self._graph.edges[source, target, key]["label"],
-                    self._graph.edges[source, target, key]["deprel"],
-                    self._graph.edges[source, target, key]["description"],
-                    weight=self._graph.edges[source, target, key]["weight"],
-                    feat_type=self._graph.edges[source, target, key]["feat_type"],
-                )
-
-        for node in other_nodes:
+        for node in args_nodes:
             self._graph.remove_node(node)
 
     def _merge_edges(self, edges):
@@ -796,7 +748,6 @@ class RelGraph:
             self._graph.remove_edge(source, target, key=key)
 
     def save(self, path):
-        self._divide_multiedges()
         for node in self._graph:
             if self._graph.nodes[node].get("vector") is not None:
                 self._graph.nodes[node]["vector"] = str(
@@ -873,58 +824,6 @@ class RelGraph:
                 self._graph.remove_node(node)
                 nodes_to_remove.discard(node)
                 break
-            else:
-                break
-
-    def _divide_multiedges(self):
-        dummy_count = 0
-        while True:
-            removed_edges = False
-            for source in self._graph:
-                for target in self._graph.successors(source):
-                    multiedges = [
-                        (s, t, k)
-                        for s, t, k in self._graph.out_edges(source, keys=True)
-                        if t == target
-                    ]
-                    if len(multiedges) < 2:
-                        continue
-
-                    for s, t, k in multiedges:
-                        dummy_name = "dummy{}".format(dummy_count)
-                        dummy_count += 1
-                        self._add_node(
-                            dummy_name,
-                            "Dummy node",
-                            label=dummy_name,
-                            weight=min(
-                                self._graph.nodes[source]["weight"],
-                                self._graph.nodes[target]["weight"],
-                            ),
-                        )
-                        self._add_edge(
-                            s,
-                            dummy_name,
-                            self._graph[s][t][k]["label"],
-                            self._graph[s][t][k]["deprel"],
-                            self._graph[s][t][k]["description"],
-                            weight=self._graph[s][t][k]["weight"],
-                            feat_type=self._graph[s][t][k]["feat_type"],
-                        )
-                        self._add_edge(
-                            dummy_name,
-                            t,
-                            self._graph[s][t][k]["label"],
-                            self._graph[s][t][k]["deprel"],
-                            self._graph[s][t][k]["description"],
-                            weight=self._graph[s][t][k]["weight"],
-                            feat_type=self._graph[s][t][k]["feat_type"],
-                        )
-                    self._graph.remove_edges_from(multiedges)
-                    removed_edges = True
-                    break
-                if removed_edges:
-                    break
             else:
                 break
 
