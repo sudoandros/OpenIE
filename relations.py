@@ -56,7 +56,7 @@ class SentenceReltuples:
                 len(self._reltuples), self.sentence.getText()
             )
             + "\n".join(
-                "({}; {}; {})".format(
+                "({}, {}, {})".format(
                     reltuple.left_arg, reltuple.relation, reltuple.right_arg
                 )
                 for reltuple in self._reltuples
@@ -363,8 +363,13 @@ class SentenceReltuples:
 
 class RelGraph:
     def __init__(self):
-        self._graph = nx.DiGraph()
-        self._ont_rel_count = 0
+        self._graph = nx.MultiDiGraph()
+
+    @classmethod
+    def from_reltuples_iter(cls, reltuples_iter):
+        graph = cls()
+        for sentence_reltuple in reltuples_iter:
+            graph.add_sentence_reltuples(sentence_reltuple)
 
     @property
     def nodes_number(self):
@@ -377,28 +382,28 @@ class RelGraph:
     def add_sentence_reltuples(self, sentence_reltuples, cluster=0):
         sentence_text = sentence_reltuples.sentence.getText()
         for reltuple in sentence_reltuples:
-            left_arg_node = self._add_arg(
-                reltuple.left_arg,
+            self._add_node(
                 reltuple.left_arg_lemmas,
                 sentence_text,
+                label=reltuple.left_arg,
                 vector=reltuple.left_w2v,
                 feat_type=cluster,
             )
-            right_arg_node = self._add_arg(
-                reltuple.right_arg,
+            self._add_node(
                 reltuple.right_arg_lemmas,
                 sentence_text,
+                label=reltuple.right_arg,
                 vector=reltuple.right_w2v,
                 feat_type=cluster,
             )
-            relation_node = self._add_relation(
+            self._add_edge(
+                reltuple.left_arg_lemmas,
+                reltuple.right_arg_lemmas,
                 reltuple.relation,
-                sentence_text,
                 reltuple.right_deprel,
+                sentence_text,
                 feat_type=cluster,
             )
-            self._graph.add_edge(left_arg_node, relation_node)
-            self._graph.add_edge(relation_node, right_arg_node)
 
     def merge_relations(self):
         while True:
@@ -540,71 +545,39 @@ class RelGraph:
             )
             self._graph[source][target][key]["weight"] += weight
 
-    def _add_arg(
-        self,
-        arg,
-        arg_lemmas,
-        description,
-        weight=1,
-        vector=None,
-        feat_type=0,
-        deprel=None,
+    def _add_node(
+        self, name, description, label=None, weight=1, vector=None, feat_type=0
     ):
-        name = "{} + {}".format(arg_lemmas, feat_type)
+        if label is None:
+            label = name
         if name not in self._graph:
             self._graph.add_node(
                 name,
-                label=arg,
+                label=label,
                 description=description,
                 weight=weight,
                 vector=vector,
                 feat_type=str(feat_type),
-                node_type="arg",
-                viz={"color": {"b": 0, "g": 0, "r": 0}},
             )
         else:
             # this node already exists
             self._graph.nodes[name]["description"] = " | ".join(
                 set(description.split(" | "))
                 | set(self._graph.nodes[name]["description"].split(" | "))
+            )
+            self._graph.nodes[name]["feat_type"] = " | ".join(
+                (
+                    set(feat_type.split(" | "))
+                    if isinstance(feat_type, str)
+                    else {str(feat_type)}
+                )
+                | set(self._graph.nodes[name]["feat_type"].split(" | "))
             )
             self._graph.nodes[name]["vector"] = (
                 self._graph.nodes[name]["weight"] * self._graph.nodes[name]["vector"]
                 + vector * weight
             ) / 2
             self._graph.nodes[name]["weight"] += weight
-        return name
-
-    def _add_relation(self, relation, description, deprel, weight=1, feat_type=0):
-        if relation == "_is_a_":
-            name = "{} + {}".format(relation, self._ont_rel_count)
-            self._ont_rel_count += 1
-            viz = {"color": {"b": 160, "g": 160, "r": 255}}
-        elif relation == "_relates_to_":
-            name = "{} + {}".format(relation, self._ont_rel_count)
-            self._ont_rel_count += 1
-            viz = {"color": {"b": 160, "g": 255, "r": 160}}
-        else:
-            name = "{} + {} + {}".format(relation, feat_type, deprel)
-            viz = {"color": {"b": 255, "g": 0, "r": 0}}
-        if name not in self._graph:
-            self._graph.add_node(
-                name,
-                label=relation,
-                description=description,
-                deprel=deprel,
-                weight=weight,
-                feat_type=feat_type,
-                viz=viz,
-            )
-        else:
-            # this node already exists
-            self._graph.nodes[name]["description"] = " | ".join(
-                set(description.split(" | "))
-                | set(self._graph.nodes[name]["description"].split(" | "))
-            )
-            self._graph.nodes[name]["weight"] += weight
-        return name
 
     def _find_nodes_to_merge(self, source=None, target=None, key=None):
         if source is not None and key is not None:
@@ -798,10 +771,7 @@ class RelGraph:
     def save(self, path):
         self._divide_multiedges()
         for node in self._graph:
-            if self._graph.nodes[node].get("vector") is not None:
-                self._graph.nodes[node]["vector"] = str(
-                    self._graph.nodes[node]["vector"]
-                )
+            self._graph.nodes[node]["vector"] = str(self._graph.nodes[node]["vector"])
         stream_buffer = io.BytesIO()
         nx.write_gexf(self._graph, stream_buffer, encoding="utf-8", version="1.1draft")
         xml_string = stream_buffer.getvalue().decode("utf-8")
