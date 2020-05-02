@@ -414,17 +414,18 @@ class RelGraph:
                 targets_to_merge = self._find_nodes_to_merge(source=source, key=key)
                 if len(targets_to_merge) > 1:
                     logging.info(
-                        "Found {} nodes to merge: \n".format(len(targets_to_merge))
-                        + "Position of nodes: right argument \n"
-                        + "Shared node: {} \n".format(
+                        "Found {} right arguments to merge: \n".format(
+                            len(targets_to_merge)
+                        )
+                        + "Shared left argument: {} \n".format(
                             self._graph.nodes[source]["label"]
                         )
-                        + "Shared edge: {} \n".format(
+                        + "Shared relation: {} \n".format(
                             self._graph[source][next(iter(targets_to_merge))][key][
                                 "label"
                             ]
                         )
-                        + "Nodes: \n"
+                        + "Values to merge: \n"
                         + "\n".join(
                             self._graph.nodes[node]["label"]
                             for node in targets_to_merge
@@ -436,20 +437,21 @@ class RelGraph:
                 sources_to_merge = self._find_nodes_to_merge(target=target, key=key)
                 if len(sources_to_merge) > 1:
                     logging.info(
-                        "Found {} nodes to merge: \n".format(len(sources_to_merge))
-                        + "Position of nodes: left argument \n"
-                        + "Shared node: {} \n".format(
+                        "Found {} left arguments to merge: \n".format(
+                            len(sources_to_merge)
+                        )
+                        + "Shared right argument: {} \n".format(
                             self._graph.nodes[target]["label"]
                         )
-                        + "Shared edge: {} \n".format(
+                        + "Shared relation: {} \n".format(
                             self._graph[next(iter(sources_to_merge))][target][key][
                                 "label"
                             ]
                         )
-                        + "Nodes: \n"
+                        + "Values to merge: \n"
                         + "\n".join(
                             self._graph.nodes[node]["label"]
-                            for node in sources_to_merge
+                            for node in targets_to_merge
                         )
                     )
                     nodes_to_merge = sources_to_merge
@@ -458,14 +460,14 @@ class RelGraph:
                 edges_to_merge = self._find_edges_to_merge(source, target)
                 if len(edges_to_merge) > 1:
                     logging.info(
-                        "Found {} edges to merge: \n".format(len(edges_to_merge))
+                        "Found {} relations to merge: \n".format(len(edges_to_merge))
                         + "Shared left argument: {} \n".format(
                             self._graph.nodes[source]["label"]
                         )
                         + "Shared right argument: {} \n".format(
                             self._graph.nodes[target]["label"]
                         )
-                        + "Edges: \n"
+                        + "Values to merge: \n"
                         + "\n".join(
                             {
                                 self._graph[s][t][key]["label"]
