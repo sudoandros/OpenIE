@@ -6,6 +6,7 @@ import string
 import sys
 import xml.etree.ElementTree as ET
 from collections import namedtuple
+from copy import deepcopy
 from functools import reduce
 from itertools import groupby
 from pathlib import Path
@@ -771,9 +772,12 @@ class RelGraph:
             self._graph.remove_edge(source, target, key=key)
 
     def save(self, path):
-        self._divide_multiedges()
+        self._transform()
         for node in self._graph:
-            self._graph.nodes[node]["vector"] = str(self._graph.nodes[node]["vector"])
+            if self._graph.nodes[node].get("vector") is not None:
+                self._graph.nodes[node]["vector"] = str(
+                    self._graph.nodes[node]["vector"]
+                )
         stream_buffer = io.BytesIO()
         nx.write_gexf(self._graph, stream_buffer, encoding="utf-8", version="1.1draft")
         xml_string = stream_buffer.getvalue().decode("utf-8")
@@ -848,57 +852,25 @@ class RelGraph:
             else:
                 break
 
-    def _divide_multiedges(self):
-        dummy_count = 0
-        while True:
-            removed_edges = False
-            for source in self._graph:
-                for target in self._graph.successors(source):
-                    multiedges = [
-                        (s, t, k)
-                        for s, t, k in self._graph.out_edges(source, keys=True)
-                        if t == target
-                    ]
-                    if len(multiedges) < 2:
-                        continue
-
-                    for s, t, k in multiedges:
-                        dummy_name = "dummy{}".format(dummy_count)
-                        dummy_count += 1
-                        self._add_node(
-                            dummy_name,
-                            "Dummy node",
-                            label=dummy_name,
-                            weight=min(
-                                self._graph.nodes[source]["weight"],
-                                self._graph.nodes[target]["weight"],
-                            ),
-                        )
-                        self._add_edge(
-                            s,
-                            dummy_name,
-                            self._graph[s][t][k]["label"],
-                            self._graph[s][t][k]["deprel"],
-                            self._graph[s][t][k]["description"],
-                            weight=self._graph[s][t][k]["weight"],
-                            feat_type=self._graph[s][t][k]["feat_type"],
-                        )
-                        self._add_edge(
-                            dummy_name,
-                            t,
-                            self._graph[s][t][k]["label"],
-                            self._graph[s][t][k]["deprel"],
-                            self._graph[s][t][k]["description"],
-                            weight=self._graph[s][t][k]["weight"],
-                            feat_type=self._graph[s][t][k]["feat_type"],
-                        )
-                    self._graph.remove_edges_from(multiedges)
-                    removed_edges = True
-                    break
-                if removed_edges:
-                    break
+    def _transform(self):
+        for node in self._graph:
+            self._graph.nodes[node]["node_type"] = "argument"
+        for source, target, key, attr in list(self._graph.edges(data=True, keys=True)):
+            name = "{}({}; {})".format(
+                self._graph.edges[source, target, key]["label"], source, target
+            )
+            new_attr = deepcopy(attr)
+            if self._graph.edges[source, target, key]["label"] == "_is_a_":
+                new_attr["viz"] = {"color": {"b": 160, "g": 160, "r": 255}}
+            elif self._graph.edges[source, target, key]["label"] == "_relates_to_":
+                new_attr["viz"] = {"color": {"b": 160, "g": 255, "r": 160}}
             else:
-                break
+                new_attr["viz"] = {"color": {"b": 255, "g": 0, "r": 0}}
+            new_attr["node_type"] = "relation"
+            self._graph.add_node(name, **new_attr)
+            self._graph.add_edge(source, name)
+            self._graph.add_edge(name, target)
+            self._graph.remove_edge(source, target, key=key)
 
     def _fix_gexf(self, root_element):
         graph_node = root_element.find("{http://www.gexf.net/1.1draft}graph")
