@@ -615,7 +615,13 @@ class RelGraph:
 
         for node1 in res.copy():
             for node2 in res.copy():
-                if node1 != node2 and self._graph.has_edge(node1, node2):
+                if node1 != node2 and (
+                    self._graph.has_edge(node1, node2)
+                    or (
+                        set(self._graph.nodes[node1]["description"].split(" | "))
+                        & set(self._graph.nodes[node2]["description"].split(" | "))
+                    )
+                 ):
                     res.discard(node1)
                     res.discard(node2)
 
