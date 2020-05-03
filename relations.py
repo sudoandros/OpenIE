@@ -945,7 +945,7 @@ class TextReltuples:
         w2v_model,
         stopwords,
         additional_relations,
-        nodes_limit,
+        entities_limit,
     ):
         sentences = udpipe_model.read(conllu, "conllu")
         self.sentences_reltuples = []
@@ -969,7 +969,7 @@ class TextReltuples:
                 for reltuple in sentence_reltuples
             ]
         self._graph.merge_relations()
-        self._graph.filter_nodes(nodes_limit)
+        self._graph.filter_nodes(entities_limit)
 
     @property
     def graph(self):
@@ -1036,7 +1036,7 @@ def build_dir_graph(
     udpipe_model,
     stopwords,
     additional_relations,
-    nodes_limit,
+    entities_limit,
     w2v_model,
 ):
     conllu = ""
@@ -1048,7 +1048,7 @@ def build_dir_graph(
             conllu = "{}\n{}".format(conllu, file.read())
 
     text_reltuples = TextReltuples(
-        conllu, udpipe_model, w2v_model, stopwords, additional_relations, nodes_limit
+        conllu, udpipe_model, w2v_model, stopwords, additional_relations, entities_limit
     )
 
     json_path = save_dir / ("relations.json")
@@ -1076,20 +1076,25 @@ if __name__ == "__main__":
         "--add", help="Include additional relations", action="store_true"
     )
     parser.add_argument(
-        "--nodes-limit",
-        help="Stop when after processing of another sentence these number "
-        "of nodes will be exceeded",
+        "--entities-limit",
+        help="Filter extracted relations to only contain this many entities",
         type=int,
     )
     args = parser.parse_args()
     conllu_dir = Path(args.conllu_dir)
     save_dir = Path(args.save_dir)
     udpipe_model = UDPipeModel(args.model_path)
-    nodes_limit = args.nodes_limit or float("inf")
+    entities_limit = args.entities_limit or float("inf")
     with open("stopwords.txt", mode="r", encoding="utf-8") as file:
         stopwords = list(file.read().split())
     w2v_model = gensim.downloader.load("word2vec-ruscorpora-300")
 
     build_dir_graph(
-        conllu_dir, save_dir, udpipe_model, stopwords, args.add, nodes_limit, w2v_model
+        conllu_dir,
+        save_dir,
+        udpipe_model,
+        stopwords,
+        args.add,
+        entities_limit,
+        w2v_model,
     )

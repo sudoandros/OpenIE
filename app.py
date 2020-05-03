@@ -44,9 +44,9 @@ def guess_encoding(content):
 
 class TextForm(FlaskForm):
     text_files = MultipleFileField("Текстовые файлы для обработки")
-    nodes_limit = IntegerField(
+    entities_limit = IntegerField(
         "Максимальное количество извлеченных сущностей",
-        default=app.config["NODES_LIMIT"],
+        default=app.config["ENTITIES_LIMIT"],
     )
     is_conllu = BooleanField(
         "Содержимое является синтаксически разобранным текстом в формате CoNLL-U"
@@ -85,10 +85,10 @@ def extract():
             conllu = "{}\n{}".format(conllu, file_conllu)
 
     additional_relations = True
-    nodes_limit = int(request.form["nodes_limit"])
+    entities_limit = int(request.form["entities_limit"])
 
     text_reltuples = TextReltuples(
-        conllu, UDPIPE_MODEL, W2V_MODEL, STOPWORDS, additional_relations, nodes_limit
+        conllu, UDPIPE_MODEL, W2V_MODEL, STOPWORDS, additional_relations, entities_limit
     )
     graph_filename = "{}.gexf".format(timestamp)
     text_reltuples.graph.save(Path(app.config["GRAPH_DIR"], graph_filename))
