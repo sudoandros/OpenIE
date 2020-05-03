@@ -452,7 +452,7 @@ class RelGraph:
                         + "Values to merge: \n"
                         + "\n".join(
                             self._graph.nodes[node]["label"]
-                            for node in targets_to_merge
+                            for node in sources_to_merge
                         )
                     )
                     nodes_to_merge = sources_to_merge
@@ -867,6 +867,9 @@ class RelGraph:
             else:
                 new_attr["viz"] = {"color": {"b": 255, "g": 0, "r": 0}}
             new_attr["node_type"] = "relation"
+            new_attr["weight"] = min(
+                self._graph.nodes[source]["weight"], self._graph.nodes[target]["weight"]
+            )
             self._graph.add_node(name, **new_attr)
             self._graph.add_edge(source, name)
             self._graph.add_edge(name, target)
