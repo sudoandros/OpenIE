@@ -621,7 +621,7 @@ class RelGraph:
                         set(self._graph.nodes[node1]["description"].split(" | "))
                         & set(self._graph.nodes[node2]["description"].split(" | "))
                     )
-                 ):
+                ):
                     res.discard(node1)
                     res.discard(node2)
 
@@ -674,6 +674,20 @@ class RelGraph:
         for s, t, key, feat_type in self._graph.edges(keys=True, data="feat_type"):
             if key in keys and cluster in feat_type.split(" | "):
                 edges.add((s, t, key))
+
+        for s1, t1, key1 in edges.copy():
+            for s2, t2, key2 in edges.copy():
+                if (s1, t1, key1) != (s2, t2, key2) and (
+                    set(self._graph.edges[s1, t1, key1]["description"].split(" | "))
+                    & set(self._graph.edges[s2, t2, key2]["description"].split(" | "))
+                ):
+                    logging.info(
+                        "Exclude relation from merging set: {} and {}".format(
+                            key1, key2
+                        )
+                    )
+                    edges.discard((s1, t1, key1))
+                    edges.discard((s2, t2, key2))
         return edges
 
     def _merge_nodes(self, nodes):
