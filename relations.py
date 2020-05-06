@@ -30,6 +30,7 @@ Reltuple = namedtuple(
         "left_arg_lemmas",
         "left_w2v",
         "relation",
+        "relation_lemmas",
         "right_arg",
         "right_arg_lemmas",
         "right_deprel",
@@ -72,6 +73,7 @@ class SentenceReltuples:
         left_arg_lemmas = self._arg_to_string(reltuple[0], lemmatized=True)
         left_w2v = _get_phrase_vector(self.sentence, reltuple[0], w2v_model)
         relation = self._relation_to_string(reltuple[1])
+        relation_lemmas = self._relation_to_string(reltuple[1], lemmatized=True)
         right_arg = self._arg_to_string(reltuple[2], lemmatized=False)
         right_arg_lemmas = self._arg_to_string(reltuple[2], lemmatized=True)
         right_deprel = self.sentence.words[self._get_root(reltuple[2]).id].deprel
@@ -81,15 +83,18 @@ class SentenceReltuples:
             left_arg_lemmas,
             left_w2v,
             relation,
+            relation_lemmas,
             right_arg,
             right_arg_lemmas,
             right_deprel,
             right_w2v,
         )
 
-    def _relation_to_string(self, relation):
-        if isinstance(relation, list):
+    def _relation_to_string(self, relation, lemmatized=False):
+        if isinstance(relation, list) and not lemmatized:
             string_ = " ".join(self.sentence.words[id_].form for id_ in relation)
+        elif isinstance(relation, list) and lemmatized:
+            string_ = " ".join(self.sentence.words[id_].lemma for id_ in relation)
         elif isinstance(relation, str):
             string_ = relation
         else:
@@ -401,6 +406,7 @@ class RelGraph:
                 reltuple.left_arg_lemmas,
                 reltuple.right_arg_lemmas,
                 reltuple.relation,
+                reltuple.relation_lemmas,
                 reltuple.right_deprel,
                 sentence_text,
                 feat_type=cluster,
@@ -490,12 +496,12 @@ class RelGraph:
         self._perform_filtering(nodes_to_remove)
 
     def _add_edge(
-        self, source, target, label, deprel, description, weight=1, feat_type=0
+        self, source, target, label, lemmas, deprel, description, weight=1, feat_type=0
     ):
         if label in ["_is_a_", "_relates_to_"]:
             key = label
         else:
-            key = "{} + {}".format(label, deprel)
+            key = "{} + {}".format(lemmas, deprel)
         if not self._graph.has_edge(source, target, key=key):
             if label == "_is_a_":
                 self._graph.add_edge(
@@ -503,6 +509,7 @@ class RelGraph:
                     target,
                     key=key,
                     label=label,
+                    lemmas=lemmas,
                     deprel=deprel,
                     description=description,
                     weight=weight,
@@ -515,6 +522,7 @@ class RelGraph:
                     target,
                     key=key,
                     label=label,
+                    lemmas=lemmas,
                     deprel=deprel,
                     description=description,
                     weight=weight,
@@ -527,6 +535,7 @@ class RelGraph:
                     target,
                     key=key,
                     label=label,
+                    lemmas=lemmas,
                     deprel=deprel,
                     description=description,
                     weight=weight,
@@ -681,11 +690,6 @@ class RelGraph:
                     set(self._graph.edges[s1, t1, key1]["description"].split(" | "))
                     & set(self._graph.edges[s2, t2, key2]["description"].split(" | "))
                 ):
-                    logging.info(
-                        "Exclude relation from merging set: {} and {}".format(
-                            key1, key2
-                        )
-                    )
                     edges.discard((s1, t1, key1))
                     edges.discard((s2, t2, key2))
         return edges
@@ -717,6 +721,7 @@ class RelGraph:
                     main_node,
                     target,
                     self._graph.edges[source, target, key]["label"],
+                    self._graph.edges[source, target, key]["lemmas"],
                     self._graph.edges[source, target, key]["deprel"],
                     self._graph.edges[source, target, key]["description"],
                     weight=self._graph.edges[source, target, key]["weight"],
@@ -727,6 +732,7 @@ class RelGraph:
                     source,
                     main_node,
                     self._graph.edges[source, target, key]["label"],
+                    self._graph.edges[source, target, key]["lemmas"],
                     self._graph.edges[source, target, key]["deprel"],
                     self._graph.edges[source, target, key]["description"],
                     weight=self._graph.edges[source, target, key]["weight"],
@@ -742,6 +748,15 @@ class RelGraph:
                 lambda x, y: x | y,
                 (
                     set(self._graph[source][target][key]["label"].split(" | "))
+                    for source, target, key in edges
+                ),
+            )
+        )
+        new_lemmas = " | ".join(
+            reduce(
+                lambda x, y: x | y,
+                (
+                    set(self._graph[source][target][key]["lemmas"].split(" | "))
                     for source, target, key in edges
                 ),
             )
@@ -784,6 +799,7 @@ class RelGraph:
                 source,
                 target,
                 new_label,
+                new_lemmas,
                 new_deprel,
                 new_description,
                 weight=new_weight,
@@ -861,6 +877,7 @@ class RelGraph:
                             pred,
                             succ,
                             self._graph[node][succ][key_succ]["label"],
+                            self._graph[node][succ][key_succ]["lemmas"],
                             self._graph[node][succ][key_succ]["deprel"],
                             self._graph[node][succ][key_succ]["description"],
                             weight=self._graph[node][succ][key_succ]["weight"],
