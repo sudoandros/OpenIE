@@ -388,14 +388,14 @@ class RelGraph:
     def add_sentence_reltuples(self, sentence_reltuples, cluster=0):
         sentence_text = sentence_reltuples.sentence.getText()
         for reltuple in sentence_reltuples:
-            self._add_node(
+            source = self._add_node(
                 reltuple.left_arg_lemmas,
                 sentence_text,
                 label=reltuple.left_arg,
                 vector=reltuple.left_w2v,
                 feat_type=cluster,
             )
-            self._add_node(
+            target = self._add_node(
                 reltuple.right_arg_lemmas,
                 sentence_text,
                 label=reltuple.right_arg,
@@ -403,8 +403,8 @@ class RelGraph:
                 feat_type=cluster,
             )
             self._add_edge(
-                reltuple.left_arg_lemmas,
-                reltuple.right_arg_lemmas,
+                source,
+                target,
                 reltuple.relation,
                 reltuple.relation_lemmas,
                 reltuple.right_deprel,
@@ -558,10 +558,9 @@ class RelGraph:
             self._graph[source][target][key]["weight"] += weight
 
     def _add_node(
-        self, name, description, label=None, weight=1, vector=None, feat_type=0
+        self, lemmas, description, label=None, weight=1, vector=None, feat_type=0
     ):
-        if label is None:
-            label = name
+        name = lemmas
         if name not in self._graph:
             self._graph.add_node(
                 name,
@@ -590,6 +589,7 @@ class RelGraph:
                 + vector * weight
             ) / 2
             self._graph.nodes[name]["weight"] += weight
+        return name
 
     def _find_nodes_to_merge(self, source=None, target=None, key=None):
         if source is not None and key is not None:
