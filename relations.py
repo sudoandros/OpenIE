@@ -12,7 +12,6 @@ from itertools import groupby
 from pathlib import Path
 
 import gensim.downloader
-import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
 from scipy.spatial import distance
@@ -22,6 +21,9 @@ from sklearn.neighbors import LocalOutlierFactor
 from tqdm import tqdm
 
 from udpipe_model import UDPipeModel
+
+MIN_CLUSTER_SIZE = 50
+COSINE_THRESHOLD = 0.3
 
 Reltuple = namedtuple(
     "Reltuple",
@@ -648,7 +650,7 @@ class RelGraph:
                     self._graph.nodes[main_node]["vector"],
                     self._graph.nodes[node]["vector"],
                 )
-                > 0.6
+                > COSINE_THRESHOLD
             ):
                 res.discard(node)
         return res
@@ -976,7 +978,11 @@ class TextReltuples:
                 stopwords=stopwords,
             )
             self.sentences_reltuples.append(sentence_reltuples)
-        cluster_labels = self._cluster(w2v_model)
+        cluster_labels = self._cluster(
+            w2v_model,
+            min_cluster_size=MIN_CLUSTER_SIZE,
+            max_cluster_size=MIN_CLUSTER_SIZE + 50,
+        )
         for sentence_reltuples, cluster in zip(
             self.sentences_reltuples, cluster_labels
         ):
