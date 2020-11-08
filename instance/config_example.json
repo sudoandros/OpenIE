@@ -1,4 +1,5 @@
 {
+    "PORT": 5000,
     "SECRET_KEY": "iamtakoiclever",
     "UDPIPE_MODEL": "models/russian-syntagrus-ud-2.4-190531.udpipe",
     "ENTITIES_LIMIT": 10000,
