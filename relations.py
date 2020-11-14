@@ -3,11 +3,11 @@ import io
 import json
 import logging
 import xml.etree.ElementTree as ET
-from collections import namedtuple
 from copy import deepcopy
 from functools import reduce
 from itertools import groupby
 from pathlib import Path
+from typing import List, NamedTuple, Sequence
 
 import gensim.downloader
 import networkx as nx
@@ -971,7 +971,7 @@ class TextReltuples:
         entities_limit,
     ):
         sentences = udpipe_model.read(conllu, "conllu")
-        self.sentences_reltuples = []
+        self._reltuples: Sequence[SentenceReltuples] = []
         self._dict = {}
         self._graph = RelGraph()
         for s in sentences:
@@ -981,13 +981,11 @@ class TextReltuples:
                 additional_relations=additional_relations,
                 stopwords=stopwords,
             )
-            self.sentences_reltuples.append(sentence_reltuples)
+            self._reltuples.append(sentence_reltuples)
         cluster_labels = self._cluster(
             min_cluster_size=MIN_CLUSTER_SIZE, max_cluster_size=MIN_CLUSTER_SIZE + 50,
         )
-        for sentence_reltuples, cluster in zip(
-            self.sentences_reltuples, cluster_labels
-        ):
+        for sentence_reltuples, cluster in zip(self._reltuples, cluster_labels):
             self._graph.add_sentence_reltuples(sentence_reltuples, cluster=cluster)
             self._dict[sentence_reltuples.sentence.getText()] = [
                 (reltuple.left_arg, reltuple.relation, reltuple.right_arg)
@@ -1004,16 +1002,18 @@ class TextReltuples:
     def dictionary(self):
         return self._dict
 
-    def _cluster(self, min_cluster_size=20, max_cluster_size=100, cluster_size_step=10):
+    def _cluster(
+        self, min_cluster_size=20, max_cluster_size=100, cluster_size_step=10
+    ) -> List[int]:
         X = np.array(
             [
                 sentence_reltuples.sentence_vector
-                for sentence_reltuples in self.sentences_reltuples
+                for sentence_reltuples in self._reltuples
             ]
         )
         max_sil_score = -1
-        n_sentences = len(self.sentences_reltuples)
-        res_labels = [0] * n_sentences
+        n_sentences = len(self._reltuples)
+        res_labels = np.zeros(n_sentences)
         for cluster_size in range(
             min_cluster_size, max_cluster_size, cluster_size_step
         ):
@@ -1026,7 +1026,7 @@ class TextReltuples:
             if score >= max_sil_score:
                 max_sil_score = score
                 res_labels = kmeans.labels_
-        return res_labels
+        return res_labels.tolist()
 
 
 def _get_phrase_vector(sentence, words_ids, w2v_model):
