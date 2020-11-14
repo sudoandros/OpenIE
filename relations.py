@@ -2,8 +2,6 @@ import argparse
 import io
 import json
 import logging
-import string
-import sys
 import xml.etree.ElementTree as ET
 from collections import namedtuple
 from copy import deepcopy
@@ -17,7 +15,6 @@ import numpy as np
 from scipy.spatial import distance
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-from sklearn.neighbors import LocalOutlierFactor
 from tqdm import tqdm
 
 from udpipe_model import UDPipeModel
@@ -67,19 +64,22 @@ class SentenceReltuples:
             )
         )
 
-    def __getitem__(self, key):
-        return self._reltuples[key]
+    def __getitem__(self, index):
+        return self._reltuples[index]
 
     def _to_tuple(self, reltuple, w2v_model):
         left_arg = self._arg_to_string(reltuple[0], lemmatized=False)
         left_arg_lemmas = self._arg_to_string(reltuple[0], lemmatized=True)
         left_w2v = _get_phrase_vector(self.sentence, reltuple[0], w2v_model)
+
         relation = self._relation_to_string(reltuple[1])
         relation_lemmas = self._relation_to_string(reltuple[1], lemmatized=True)
+
         right_arg = self._arg_to_string(reltuple[2], lemmatized=False)
         right_arg_lemmas = self._arg_to_string(reltuple[2], lemmatized=True)
         right_deprel = self.sentence.words[self._get_root(reltuple[2]).id].deprel
         right_w2v = _get_phrase_vector(self.sentence, reltuple[2], w2v_model)
+
         return Reltuple(
             left_arg,
             left_arg_lemmas,
@@ -114,7 +114,8 @@ class SentenceReltuples:
             )
         return self._clean_string(string_)
 
-    def _clean_string(self, string_):
+    @staticmethod
+    def _clean_string(string_):
         res = (
             "".join(
                 char
@@ -342,8 +343,7 @@ class SentenceReltuples:
         return res
 
     def _get_root(self, words_ids):
-        if not words_ids:
-            return None
+        root = None
         for id_ in words_ids:
             word = self.sentence.words[id_]
             if word.head not in words_ids:
@@ -359,13 +359,16 @@ class SentenceReltuples:
             and self.sentence.words[words_ids[0]].lemma.isalpha()
         )
 
-    def _is_subject(self, word):
+    @staticmethod
+    def _is_subject(word):
         return word.deprel in ("nsubj", "nsubj:pass")
 
-    def _is_right_arg(self, word):
+    @staticmethod
+    def _is_right_arg(word):
         return word.deprel in ("obj", "iobj", "obl", "obl:agent", "iobl")
 
-    def _is_conjunct(self, word):
+    @staticmethod
+    def _is_conjunct(word):
         return word.deprel == "conj"
 
 
@@ -914,7 +917,8 @@ class RelGraph:
             self._graph.add_edge(name, target)
             self._graph.remove_edge(source, target, key=key)
 
-    def _fix_gexf(self, root_element):
+    @staticmethod
+    def _fix_gexf(root_element):
         graph_node = root_element.find("{http://www.gexf.net/1.1draft}graph")
         attributes_nodes = graph_node.findall(
             "{http://www.gexf.net/1.1draft}attributes"
@@ -979,9 +983,7 @@ class TextReltuples:
             )
             self.sentences_reltuples.append(sentence_reltuples)
         cluster_labels = self._cluster(
-            w2v_model,
-            min_cluster_size=MIN_CLUSTER_SIZE,
-            max_cluster_size=MIN_CLUSTER_SIZE + 50,
+            min_cluster_size=MIN_CLUSTER_SIZE, max_cluster_size=MIN_CLUSTER_SIZE + 50,
         )
         for sentence_reltuples, cluster in zip(
             self.sentences_reltuples, cluster_labels
@@ -1002,9 +1004,7 @@ class TextReltuples:
     def dictionary(self):
         return self._dict
 
-    def _cluster(
-        self, w2v_model, min_cluster_size=20, max_cluster_size=100, cluster_size_step=10
-    ):
+    def _cluster(self, min_cluster_size=20, max_cluster_size=100, cluster_size_step=10):
         X = np.array(
             [
                 sentence_reltuples.sentence_vector
