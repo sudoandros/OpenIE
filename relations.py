@@ -377,7 +377,7 @@ class RelGraph:
         self._graph = nx.MultiDiGraph()
 
     @classmethod
-    def from_reltuples_iter(cls, reltuples_iter):
+    def from_reltuples_iter(cls, reltuples_iter: Sequence[SentenceReltuples]):
         graph = cls()
         for sentence_reltuple in reltuples_iter:
             graph.add_sentence_reltuples(sentence_reltuple)
@@ -390,7 +390,9 @@ class RelGraph:
     def edges_number(self):
         return self._graph.number_of_edges()
 
-    def add_sentence_reltuples(self, sentence_reltuples, cluster=0):
+    def add_sentence_reltuples(
+        self, sentence_reltuples: SentenceReltuples, cluster: int = 0
+    ):
         sentence_text = sentence_reltuples.sentence.getText()
         for reltuple in sentence_reltuples:
             source = self._add_node(
@@ -426,21 +428,22 @@ class RelGraph:
                 targets_to_merge = self._find_nodes_to_merge(source=source, key=key)
                 if len(targets_to_merge) > 1:
                     logging.info(
-                        "Found {} right arguments to merge: \n".format(
-                            len(targets_to_merge)
-                        )
-                        + "Shared left argument: {} \n".format(
-                            self._graph.nodes[source]["label"]
-                        )
-                        + "Shared relation: {} \n".format(
-                            self._graph[source][next(iter(targets_to_merge))][key][
+                        (
+                            "Found {n_to_merge} right arguments to merge: \n"
+                            "Shared left argument: {left_arg} \n"
+                            "Shared relation: {rel} \n"
+                            "Values to merge: \n"
+                            "{values_to_merge}"
+                        ).format(
+                            n_to_merge=len(targets_to_merge),
+                            left_arg=self._graph.nodes[source]["label"],
+                            rel=self._graph[source][next(iter(targets_to_merge))][key][
                                 "label"
-                            ]
-                        )
-                        + "Values to merge: \n"
-                        + "\n".join(
-                            self._graph.nodes[node]["label"]
-                            for node in targets_to_merge
+                            ],
+                            values_to_merge="\n".join(
+                                self._graph.nodes[node]["label"]
+                                for node in targets_to_merge
+                            ),
                         )
                     )
                     nodes_to_merge = targets_to_merge
@@ -449,21 +452,22 @@ class RelGraph:
                 sources_to_merge = self._find_nodes_to_merge(target=target, key=key)
                 if len(sources_to_merge) > 1:
                     logging.info(
-                        "Found {} left arguments to merge: \n".format(
-                            len(sources_to_merge)
-                        )
-                        + "Shared right argument: {} \n".format(
-                            self._graph.nodes[target]["label"]
-                        )
-                        + "Shared relation: {} \n".format(
-                            self._graph[next(iter(sources_to_merge))][target][key][
+                        (
+                            "Found {n_to_merge} left arguments to merge: \n"
+                            "Shared right argument: {right_arg} \n"
+                            "Shared relation: {rel} \n"
+                            "Values to merge: \n"
+                            "{values_to_merge}"
+                        ).format(
+                            n_to_merge=len(sources_to_merge),
+                            right_arg=self._graph.nodes[target]["label"],
+                            rel=self._graph[next(iter(sources_to_merge))][target][key][
                                 "label"
-                            ]
-                        )
-                        + "Values to merge: \n"
-                        + "\n".join(
-                            self._graph.nodes[node]["label"]
-                            for node in sources_to_merge
+                            ],
+                            values_to_merge="\n".join(
+                                self._graph.nodes[node]["label"]
+                                for node in sources_to_merge
+                            ),
                         )
                     )
                     nodes_to_merge = sources_to_merge
@@ -472,19 +476,22 @@ class RelGraph:
                 edges_to_merge = self._find_edges_to_merge(source, target)
                 if len(edges_to_merge) > 1:
                     logging.info(
-                        "Found {} relations to merge: \n".format(len(edges_to_merge))
-                        + "Shared left argument: {} \n".format(
-                            self._graph.nodes[source]["label"]
-                        )
-                        + "Shared right argument: {} \n".format(
-                            self._graph.nodes[target]["label"]
-                        )
-                        + "Values to merge: \n"
-                        + "\n".join(
-                            {
-                                self._graph[s][t][key]["label"]
-                                for s, t, key in edges_to_merge
-                            }
+                        (
+                            "Found {n_to_merge} relations to merge: \n"
+                            "Shared left argument: {left_arg} \n"
+                            "Shared right argument: {right_arg} \n"
+                            "Values to merge: \n"
+                            "{values_to_merge}"
+                        ).format(
+                            n_to_merge=len(edges_to_merge),
+                            left_arg=self._graph.nodes[source]["label"],
+                            right_arg=self._graph.nodes[target]["label"],
+                            values_to_merge="\n".join(
+                                {
+                                    self._graph[s][t][key]["label"]
+                                    for s, t, key in edges_to_merge
+                                }
+                            ),
                         )
                     )
                     break
@@ -668,27 +675,31 @@ class RelGraph:
         ]
 
         keys.sort(key=lambda elem: elem[1:])
-        cluster_group = []
-        for _, g_cluster in groupby(keys, key=lambda elem: elem[1]):
-            cluster_group = list(g_cluster)
-            if len(cluster_group) < 2:
+        skip_cluster = False
+        for cluster_name, cluster_group in groupby(keys, key=lambda elem: elem[1]):
+            cluster_group_list = list(cluster_group)
+            if len(cluster_group_list) == 1:
                 continue
-            for _, g_label in groupby(cluster_group, key=lambda elem: elem[2]):
-                label_group = list(g_label)
-                if len(label_group) > 1:
+            for _, label_group in groupby(cluster_group_list, key=lambda elem: elem[2]):
+                if len(list(label_group)) > 1:
+                    skip_cluster = True
                     break
+            if skip_cluster:
+                skip_cluster = False
+                continue
             else:
+                keys = set(key for key, *_ in cluster_group_list)
+                cluster = cluster_name
                 break
-        else:
-            return []
-        keys = set(key for key, *_ in cluster_group)
-        cluster = cluster_group[0][1]
+        else:  # all clusters have been skipped
+            return set()
 
         edges = set()
         for s, t, key, feat_type in self._graph.edges(keys=True, data="feat_type"):
             if key in keys and cluster in feat_type.split(" | "):
                 edges.add((s, t, key))
 
+        # relations from the same sentence are out
         for s1, t1, key1 in edges.copy():
             for s2, t2, key2 in edges.copy():
                 if (s1, t1, key1) != (s2, t2, key2) and (
@@ -721,84 +732,48 @@ class RelGraph:
         )
 
         for source, target, key in self._graph.edges(other_nodes, keys=True):
+            edge_ends = None
             if source in other_nodes:  # "out" edge
-                self._add_edge(
-                    main_node,
-                    target,
-                    self._graph.edges[source, target, key]["label"],
-                    self._graph.edges[source, target, key]["lemmas"],
-                    self._graph.edges[source, target, key]["deprel"],
-                    self._graph.edges[source, target, key]["description"],
-                    weight=self._graph.edges[source, target, key]["weight"],
-                    feat_type=self._graph.edges[source, target, key]["feat_type"],
-                )
+                edge_ends = (main_node, target)
             elif target in other_nodes:  # "in" edge
-                self._add_edge(
-                    source,
-                    main_node,
-                    self._graph.edges[source, target, key]["label"],
-                    self._graph.edges[source, target, key]["lemmas"],
-                    self._graph.edges[source, target, key]["deprel"],
-                    self._graph.edges[source, target, key]["description"],
-                    weight=self._graph.edges[source, target, key]["weight"],
-                    feat_type=self._graph.edges[source, target, key]["feat_type"],
-                )
+                edge_ends = (source, main_node)
+            self._add_edge(
+                *edge_ends,
+                self._graph.edges[source, target, key]["label"],
+                self._graph.edges[source, target, key]["lemmas"],
+                self._graph.edges[source, target, key]["deprel"],
+                self._graph.edges[source, target, key]["description"],
+                weight=self._graph.edges[source, target, key]["weight"],
+                feat_type=self._graph.edges[source, target, key]["feat_type"],
+            )
 
         for node in other_nodes:
             self._graph.remove_node(node)
 
     def _merge_edges(self, edges):
-        new_label = " | ".join(
-            reduce(
-                lambda x, y: x | y,
-                (
-                    set(self._graph[source][target][key]["label"].split(" | "))
-                    for source, target, key in edges
-                ),
+        def new_str_attr_value(attr_key):
+            return " | ".join(
+                reduce(
+                    lambda x, y: x | y,
+                    (
+                        set(self._graph[source][target][key][attr_key].split(" | "))
+                        for source, target, key in edges
+                    ),
+                )
             )
-        )
-        new_lemmas = " | ".join(
-            reduce(
-                lambda x, y: x | y,
-                (
-                    set(self._graph[source][target][key]["lemmas"].split(" | "))
-                    for source, target, key in edges
-                ),
-            )
-        )
-        new_deprel = " | ".join(
-            reduce(
-                lambda x, y: x | y,
-                (
-                    set(self._graph[source][target][key]["deprel"].split(" | "))
-                    for source, target, key in edges
-                ),
-            )
-        )
-        new_description = " | ".join(
-            reduce(
-                lambda x, y: x | y,
-                (
-                    set(self._graph[source][target][key]["description"].split(" | "))
-                    for source, target, key in edges
-                ),
-            )
-        )
+
+        new_label = new_str_attr_value("label")
+        new_lemmas = new_str_attr_value("lemmas")
+        new_deprel = new_str_attr_value("deprel")
+        new_description = new_str_attr_value("description")
+        new_feat_type = new_str_attr_value("feat_type")
         new_weight = sum(
-            {
+            (
                 self._graph[source][target][key]["weight"]
                 for source, target, key in edges
-            }
-        )
-        new_feat_type = " | ".join(
-            reduce(
-                lambda x, y: x | y,
-                (
-                    set(self._graph[source][target][key]["feat_type"].split(" | "))
-                    for source, target, key in edges
-                ),
             )
         )
+        # FIXME new attributes are generated twice?
         for source, target, key in edges:
             self._add_edge(
                 source,
@@ -1001,6 +976,8 @@ class TextReltuples:
     @property
     def dictionary(self):
         return self._dict
+
+    # TODO iterate over reltuples by __iter__?
 
     def _cluster(
         self, min_cluster_size=20, max_cluster_size=100, cluster_size_step=10
