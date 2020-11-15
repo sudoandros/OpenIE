@@ -812,6 +812,7 @@ class RelGraph:
         nodes_to_leave = set(all_nodes[: min(n_nodes_to_leave, len(all_nodes))])
         next_node_index = min(n_nodes_to_leave, len(all_nodes)) + 1
 
+        # exclude nodes connected by additional relations only
         while True:
             for node in nodes_to_leave:
                 if all(
@@ -827,7 +828,7 @@ class RelGraph:
                         self._graph.edges[source, target, key]["label"]
                         in ["_is_a_", "_relates_to_"]
                         for source, target, key in self._graph.in_edges(node, keys=True)
-                        if target in nodes_to_leave
+                        if source in nodes_to_leave
                     ]
                 ):
                     nodes_to_leave.discard(node)
@@ -849,10 +850,12 @@ class RelGraph:
                 for pred, _, key_pred in in_edges:
                     for _, succ, key_succ in out_edges:
                         if (
-                            not self._graph[node][succ][key_succ]["label"]
-                            == self._graph[pred][node][key_pred]["label"]
+                            self._graph[node][succ][key_succ]["label"]
+                            != self._graph[pred][node][key_pred]["label"]
                         ):
                             continue
+                        # FIXME wrong attrs in the new edge?
+                        # to implement A->B->C  ==>  A->C
                         self._add_edge(
                             pred,
                             succ,
@@ -870,6 +873,7 @@ class RelGraph:
                 break
 
     def _transform(self):
+        # transform relations from edges to nodes with specific node_type and color
         for node in self._graph:
             self._graph.nodes[node]["node_type"] = "argument"
         for source, target, key, attr in list(self._graph.edges(data=True, keys=True)):
