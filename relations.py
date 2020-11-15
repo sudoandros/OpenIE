@@ -1054,31 +1054,29 @@ def _get_phrase_vector(sentence, words_ids, w2v_model):
 
 
 def build_dir_graph(
-    conllu_dir,
-    save_dir,
-    udpipe_model,
-    stopwords,
-    additional_relations,
-    entities_limit,
+    conllu_dir: Path,
+    save_dir: Path,
+    udpipe_model: UDPipeModel,
+    stopwords: List[str],
+    additional_relations: bool,
+    entities_limit: int,
     w2v_model,
 ):
     conllu = ""
-
-    for path in tqdm(conllu_dir.iterdir()):
-        if not (path.suffix == ".conllu"):
-            continue
-        with path.open("r", encoding="utf8") as file:
-            conllu = "{}\n{}".format(conllu, file.read())
+    for path in tqdm(conllu_dir.glob("*.conllu")):
+        with path.open("r", encoding="utf8") as conllu_file:
+            conllu = "{}\n{}".format(conllu, conllu_file.read())
 
     text_reltuples = TextReltuples(
         conllu, udpipe_model, w2v_model, stopwords, additional_relations, entities_limit
     )
 
-    json_path = save_dir / ("relations.json")
-    with json_path.open("w", encoding="utf8") as file:
-        json.dump(text_reltuples.dictionary, file, ensure_ascii=False, indent=4)
+    json_path = save_dir / "relations_{}.json".format(conllu_dir.name)
+    with json_path.open("w", encoding="utf8") as json_file:
+        json.dump(text_reltuples.dictionary, json_file, ensure_ascii=False, indent=4)
 
-    text_reltuples.graph.save(save_dir / "graph{}.gexf".format(conllu_dir.name))
+    graph_path = save_dir / "graph_{}.gexf".format(conllu_dir.name)
+    text_reltuples.graph.save(graph_path)
     print(text_reltuples.graph.nodes_number, text_reltuples.graph.edges_number)
 
 
