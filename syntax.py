@@ -1,11 +1,5 @@
-import argparse
 import html
-import json
 import re
-import sys
-from pathlib import Path
-
-from udpipe_model import UDPipeModel
 
 
 def parse_text(text, udpipe_model, format_=None):
