@@ -13,8 +13,8 @@ import gensim.downloader
 import networkx as nx
 import numpy as np
 from scipy.spatial import distance
-from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
+from sklearn_extra.cluster import KMedoids
 from tqdm import tqdm
 
 from udpipe_model import UDPipeModel
@@ -984,7 +984,7 @@ class TextReltuples:
     # TODO iterate over reltuples by __iter__?
 
     def _cluster(
-        self, min_cluster_size=20, max_cluster_size=100, cluster_size_step=10
+        self, min_cluster_size=10, max_cluster_size=100, cluster_size_step=10
     ) -> List[int]:
         X = np.array(
             [
@@ -1001,12 +1001,14 @@ class TextReltuples:
             n_clusters = n_sentences // cluster_size
             if n_clusters < 2:
                 continue
-            kmeans = KMeans(n_clusters=n_clusters, n_jobs=1)
-            kmeans.fit(X)
-            score = silhouette_score(X, kmeans.labels_)
+            clusterer = KMedoids(
+                n_clusters=n_clusters, init="k-medoids++", metric="cosine"
+            )
+            clusterer.fit(X)
+            score = silhouette_score(X, clusterer.labels_)
             if score >= max_sil_score:
                 max_sil_score = score
-                res_labels = kmeans.labels_
+                res_labels = clusterer.labels_
         return res_labels.tolist()
 
 
