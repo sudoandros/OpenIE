@@ -22,20 +22,17 @@ from udpipe_model import UDPipeModel
 MIN_CLUSTER_SIZE = 50
 COSINE_THRESHOLD = 0.3
 
-Reltuple = namedtuple(
-    "Reltuple",
-    [
-        "left_arg",
-        "left_arg_lemmas",
-        "left_w2v",
-        "relation",
-        "relation_lemmas",
-        "right_arg",
-        "right_arg_lemmas",
-        "right_deprel",
-        "right_w2v",
-    ],
-)
+
+class Reltuple(NamedTuple):
+    left_arg: str
+    left_arg_lemmas: str
+    left_w2v: np.ndarray
+    relation: str
+    relation_lemmas: str
+    right_arg: str
+    right_arg_lemmas: str
+    right_deprel: str
+    right_w2v: np.ndarray
 
 
 class SentenceReltuples:
