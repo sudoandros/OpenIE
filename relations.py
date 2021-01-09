@@ -766,27 +766,12 @@ class RelGraph:
         new_label = new_str_attr_value("label")
         new_lemmas = new_str_attr_value("lemmas")
         new_deprel = new_str_attr_value("deprel")
-        new_description = reduce(
-            lambda x, y: x | y,
-            (
-                self._graph[source][target][key]["description"]
-                for source, target, key in edges
-            ),
-        )
-        new_feat_type = reduce(
-            lambda x, y: x | y,
-            (
-                self._graph[source][target][key]["feat_type"]
-                for source, target, key in edges
-            ),
-        )
         new_weight = sum(
             (
                 self._graph[source][target][key]["weight"]
                 for source, target, key in edges
             )
         )
-        # FIXME new attributes are generated twice?
         for source, target, key in edges:
             self._add_edge(
                 source,
@@ -794,9 +779,9 @@ class RelGraph:
                 new_label,
                 new_lemmas,
                 new_deprel,
-                new_description,
+                self._graph[source][target][key]["description"],
                 weight=new_weight,
-                feat_type=new_feat_type,
+                feat_type=self._graph[source][target][key]["feat_type"],
             )
             self._graph.remove_edge(source, target, key=key)
 
