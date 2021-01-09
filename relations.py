@@ -604,45 +604,39 @@ class RelGraph:
             self._graph.nodes[name]["weight"] += weight
         return name
 
-    def _find_nodes_to_merge(self, source=None, target=None, key=None):
-        if source is not None and key is not None:
-            res = {
-                target
-                for target in self._graph.successors(source)
-                if self._graph.has_edge(source, target, key=key)
-                and self._graph[source][target][key]["label"]
-                not in ["_is_a_", "_relates_to_"]
-                and (
-                    self._graph.nodes[source]["feat_type"]
-                    & self._graph.nodes[target]["feat_type"]
-                )
-            }
-        elif target is not None and key is not None:
-            res = {
-                source
-                for source in self._graph.predecessors(target)
-                if self._graph.has_edge(source, target, key=key)
-                and self._graph[source][target][key]["label"]
-                not in ["_is_a_", "_relates_to_"]
-                and (
-                    self._graph.nodes[source]["feat_type"]
-                    & self._graph.nodes[target]["feat_type"]
-                )
-            }
-        else:
-            raise ValueError("Wrong set of specified arguments")
+    def _find_target_merge_candidates(self, source, key):
+        return {
+            target
+            for target in self._graph.successors(source)
+            if self._graph.has_edge(source, target, key=key)
+            and self._graph[source][target][key]["label"]
+            not in ["_is_a_", "_relates_to_"]
+            and (
+                self._graph.nodes[source]["feat_type"]
+                & self._graph.nodes[target]["feat_type"]
+            )
+        }
 
-        if len(res) < 2:
-            return res
+    def _find_source_merge_candidates(self, target, key):
+        return {
+            source
+            for source in self._graph.predecessors(target)
+            if self._graph.has_edge(source, target, key=key)
+            and self._graph[source][target][key]["label"]
+            not in ["_is_a_", "_relates_to_"]
+            and (
+                self._graph.nodes[source]["feat_type"]
+                & self._graph.nodes[target]["feat_type"]
+            )
+        }
 
+    def _filter_node_merge_candidates(self, nodes):
+        res = nodes.copy()
         for node1 in res.copy():
-            for node2 in res.copy():
-                if node1 != node2 and (
-                    self._graph.has_edge(node1, node2)
-                    or (
-                        self._graph.nodes[node1]["description"]
-                        & self._graph.nodes[node2]["description"]
-                    )
+            for node2 in res.difference([node1]):
+                if self._graph.has_edge(node1, node2) or (
+                    self._graph.nodes[node1]["description"]
+                    & self._graph.nodes[node2]["description"]
                 ):
                     res.discard(node1)
                     res.discard(node2)
@@ -664,6 +658,20 @@ class RelGraph:
                 > COSINE_THRESHOLD
             ):
                 res.discard(node)
+        return res
+
+    def _find_nodes_to_merge(self, source=None, target=None, key=None):
+        if source is not None and key is not None:
+            res = self._find_target_merge_candidates(source, key)
+        elif target is not None and key is not None:
+            res = self._find_source_merge_candidates(target, key)
+        else:
+            raise ValueError("Wrong set of specified arguments")
+
+        if len(res) < 2:
+            return res
+
+        res = self._filter_node_merge_candidates(res)
         return res
 
     def _find_edges_to_merge(self, source, target):
