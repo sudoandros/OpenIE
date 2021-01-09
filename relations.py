@@ -511,6 +511,10 @@ class RelGraph:
             key = label
         else:
             key = "{} + {}".format(lemmas, deprel)
+        if isinstance(description, str):
+            description = set([description])
+        else:
+            description = set(description)
         if not self._graph.has_edge(source, target, key=key):
             if label == "_is_a_":
                 self._graph.add_edge(
@@ -552,9 +556,8 @@ class RelGraph:
                 )
         else:
             # this edge already exists
-            self._graph[source][target][key]["description"] = " | ".join(
-                set(description.split(" | "))
-                | set(self._graph[source][target][key]["description"].split(" | "))
+            self._graph[source][target][key]["description"] = (
+                description | self._graph[source][target][key]["description"]
             )
             self._graph[source][target][key]["feat_type"] = " | ".join(
                 (
@@ -570,6 +573,10 @@ class RelGraph:
         self, lemmas, description, label=None, weight=1, vector=None, feat_type=0
     ):
         name = lemmas
+        if isinstance(description, str):
+            description = set([description])
+        else:
+            description = set(description)
         if name not in self._graph:
             self._graph.add_node(
                 name,
@@ -581,9 +588,8 @@ class RelGraph:
             )
         else:
             # this node already exists
-            self._graph.nodes[name]["description"] = " | ".join(
-                set(description.split(" | "))
-                | set(self._graph.nodes[name]["description"].split(" | "))
+            self._graph.nodes[name]["description"] = (
+                description | self._graph.nodes[name]["description"]
             )
             self._graph.nodes[name]["feat_type"] = " | ".join(
                 (
@@ -636,8 +642,8 @@ class RelGraph:
                 if node1 != node2 and (
                     self._graph.has_edge(node1, node2)
                     or (
-                        set(self._graph.nodes[node1]["description"].split(" | "))
-                        & set(self._graph.nodes[node2]["description"].split(" | "))
+                        self._graph.nodes[node1]["description"]
+                        & self._graph.nodes[node2]["description"]
                     )
                 ):
                     res.discard(node1)
@@ -700,8 +706,8 @@ class RelGraph:
         for s1, t1, key1 in edges.copy():
             for s2, t2, key2 in edges.copy():
                 if (s1, t1, key1) != (s2, t2, key2) and (
-                    set(self._graph.edges[s1, t1, key1]["description"].split(" | "))
-                    & set(self._graph.edges[s2, t2, key2]["description"].split(" | "))
+                    self._graph.edges[s1, t1, key1]["description"]
+                    & self._graph.edges[s2, t2, key2]["description"]
                 ):
                     edges.discard((s1, t1, key1))
                     edges.discard((s2, t2, key2))
@@ -762,7 +768,13 @@ class RelGraph:
         new_label = new_str_attr_value("label")
         new_lemmas = new_str_attr_value("lemmas")
         new_deprel = new_str_attr_value("deprel")
-        new_description = new_str_attr_value("description")
+        new_description = reduce(
+            lambda x, y: x | y,
+            (
+                self._graph[source][target][key]["description"]
+                for source, target, key in edges
+            ),
+        )
         new_feat_type = new_str_attr_value("feat_type")
         new_weight = sum(
             (
@@ -791,6 +803,9 @@ class RelGraph:
                 self._graph.nodes[node]["vector"] = str(
                     self._graph.nodes[node]["vector"]
                 )
+            self._graph.nodes[node]["description"] = " | ".join(
+                self._graph.nodes[node]["description"]
+            )
         stream_buffer = io.BytesIO()
         nx.write_gexf(self._graph, stream_buffer, encoding="utf-8", version="1.1draft")
         xml_string = stream_buffer.getvalue().decode("utf-8")
