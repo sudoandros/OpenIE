@@ -805,7 +805,7 @@ class RelGraph:
         for node in self._graph:
             if self._graph.nodes[node].get("vector") is not None:
                 self._graph.nodes[node]["vector"] = str(
-                    self._graph.nodes[node]["vector"]
+                    self._graph.nodes[node]["vector"].tolist()
                 )
             self._graph.nodes[node]["description"] = " | ".join(
                 self._graph.nodes[node]["description"]
