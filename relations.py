@@ -515,6 +515,10 @@ class RelGraph:
             description = set([description])
         else:
             description = set(description)
+        if isinstance(feat_type, int):
+            feat_type = set([feat_type])
+        else:
+            feat_type = set(feat_type)
         if not self._graph.has_edge(source, target, key=key):
             if label == "_is_a_":
                 self._graph.add_edge(
@@ -526,7 +530,7 @@ class RelGraph:
                     deprel=deprel,
                     description=description,
                     weight=weight,
-                    feat_type=str(feat_type),
+                    feat_type=feat_type,
                     viz={"color": {"b": 255, "g": 0, "r": 0}},
                 )
             elif label == "_relates_to_":
@@ -539,7 +543,7 @@ class RelGraph:
                     deprel=deprel,
                     description=description,
                     weight=weight,
-                    feat_type=str(feat_type),
+                    feat_type=feat_type,
                     viz={"color": {"b": 0, "g": 255, "r": 0}},
                 )
             else:
@@ -552,20 +556,15 @@ class RelGraph:
                     deprel=deprel,
                     description=description,
                     weight=weight,
-                    feat_type=str(feat_type),
+                    feat_type=feat_type,
                 )
         else:
             # this edge already exists
             self._graph[source][target][key]["description"] = (
                 description | self._graph[source][target][key]["description"]
             )
-            self._graph[source][target][key]["feat_type"] = " | ".join(
-                (
-                    set(feat_type.split(" | "))
-                    if isinstance(feat_type, str)
-                    else {str(feat_type)}
-                )
-                | set(self._graph[source][target][key]["feat_type"].split(" | "))
+            self._graph[source][target][key]["feat_type"] = (
+                feat_type | self._graph[source][target][key]["feat_type"]
             )
             self._graph[source][target][key]["weight"] += weight
 
@@ -577,6 +576,10 @@ class RelGraph:
             description = set([description])
         else:
             description = set(description)
+        if isinstance(feat_type, int):
+            feat_type = set([feat_type])
+        else:
+            feat_type = set(feat_type)
         if name not in self._graph:
             self._graph.add_node(
                 name,
@@ -584,20 +587,15 @@ class RelGraph:
                 description=description,
                 weight=weight,
                 vector=vector,
-                feat_type=str(feat_type),
+                feat_type=feat_type,
             )
         else:
             # this node already exists
             self._graph.nodes[name]["description"] = (
                 description | self._graph.nodes[name]["description"]
             )
-            self._graph.nodes[name]["feat_type"] = " | ".join(
-                (
-                    set(feat_type.split(" | "))
-                    if isinstance(feat_type, str)
-                    else {str(feat_type)}
-                )
-                | set(self._graph.nodes[name]["feat_type"].split(" | "))
+            self._graph.nodes[name]["feat_type"] = (
+                feat_type | self._graph.nodes[name]["feat_type"]
             )
             self._graph.nodes[name]["vector"] = (
                 self._graph.nodes[name]["weight"] * self._graph.nodes[name]["vector"]
@@ -615,8 +613,8 @@ class RelGraph:
                 and self._graph[source][target][key]["label"]
                 not in ["_is_a_", "_relates_to_"]
                 and (
-                    set(self._graph.nodes[source]["feat_type"].split(" | "))
-                    & set(self._graph.nodes[target]["feat_type"].split(" | "))
+                    self._graph.nodes[source]["feat_type"]
+                    & self._graph.nodes[target]["feat_type"]
                 )
             }
         elif target is not None and key is not None:
@@ -627,8 +625,8 @@ class RelGraph:
                 and self._graph[source][target][key]["label"]
                 not in ["_is_a_", "_relates_to_"]
                 and (
-                    set(self._graph.nodes[source]["feat_type"].split(" | "))
-                    & set(self._graph.nodes[target]["feat_type"].split(" | "))
+                    self._graph.nodes[source]["feat_type"]
+                    & self._graph.nodes[target]["feat_type"]
                 )
             }
         else:
@@ -674,7 +672,7 @@ class RelGraph:
             for _, _, key, attr in self._graph.out_edges(source, keys=True, data=True)
             if self._graph.has_edge(source, target, key=key)
             and attr["label"] not in ["_is_a_", "_relates_to_"]
-            for cluster in set(attr["feat_type"].split(" | "))
+            for cluster in attr["feat_type"]
         ]
 
         keys.sort(key=lambda elem: elem[1:])
@@ -699,7 +697,7 @@ class RelGraph:
 
         edges = set()
         for s, t, key, feat_type in self._graph.edges(keys=True, data="feat_type"):
-            if key in keys and cluster in feat_type.split(" | "):
+            if key in keys and cluster in feat_type:
                 edges.add((s, t, key))
 
         # relations from the same sentence are out
@@ -775,7 +773,13 @@ class RelGraph:
                 for source, target, key in edges
             ),
         )
-        new_feat_type = new_str_attr_value("feat_type")
+        new_feat_type = reduce(
+            lambda x, y: x | y,
+            (
+                self._graph[source][target][key]["feat_type"]
+                for source, target, key in edges
+            ),
+        )
         new_weight = sum(
             (
                 self._graph[source][target][key]["weight"]
@@ -805,6 +809,9 @@ class RelGraph:
                 )
             self._graph.nodes[node]["description"] = " | ".join(
                 self._graph.nodes[node]["description"]
+            )
+            self._graph.nodes[node]["feat_type"] = " | ".join(
+                str(elem) for elem in self._graph.nodes[node]["feat_type"]
             )
         stream_buffer = io.BytesIO()
         nx.write_gexf(self._graph, stream_buffer, encoding="utf-8", version="1.1draft")
