@@ -415,6 +415,7 @@ class RelGraph:
                 sentence_text,
                 feat_type=cluster,
             )
+        self._inherit_relations()
 
     def merge_relations(self):
         while True:
@@ -603,6 +604,61 @@ class RelGraph:
             ) / 2
             self._graph.nodes[name]["weight"] += weight
         return name
+
+    def _inherit_relations(self):
+        modified = True
+        while modified:
+            modified = False
+            for node in self._graph:
+                predecessors_by_is_a = {
+                    n
+                    for n in self._graph.predecessors(node)
+                    if self._graph.has_edge(n, node, key="_is_a_")
+                }
+                in_verb_rel_edges = [
+                    (source, key, attr)
+                    for n in predecessors_by_is_a
+                    for source, _, key, attr in self._graph.in_edges(
+                        n, data=True, keys=True
+                    )
+                    if key not in ["_is_a_", "_relates_to_"]
+                ]
+                out_verb_rel_edges = [
+                    (target, key, attr)
+                    for n in predecessors_by_is_a
+                    for _, target, key, attr in self._graph.out_edges(
+                        n, data=True, keys=True
+                    )
+                    if key not in ["_is_a_", "_relates_to_"]
+                ]
+                for source, key, attr in in_verb_rel_edges:
+                    if self._graph.has_edge(source, node, key=key):
+                        continue
+                    self._add_edge(
+                        source,
+                        node,
+                        attr["label"],
+                        attr["lemmas"],
+                        attr["deprel"],
+                        attr["description"],
+                        weight=attr["weight"],
+                        feat_type=attr["feat_type"],
+                    )
+                    modified = True
+                for target, key, attr in out_verb_rel_edges:
+                    if self._graph.has_edge(node, target, key=key):
+                        continue
+                    self._add_edge(
+                        node,
+                        target,
+                        attr["label"],
+                        attr["lemmas"],
+                        attr["deprel"],
+                        attr["description"],
+                        weight=attr["weight"],
+                        feat_type=attr["feat_type"],
+                    )
+                    modified = True
 
     def _find_target_merge_candidates(self, source, key):
         return {
