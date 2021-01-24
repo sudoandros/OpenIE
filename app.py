@@ -81,8 +81,8 @@ def extract():
         if request.form.get("is_conllu") == "y":
             conllu = text
         else:
-            file_conllu = parse_text(text, UDPIPE_MODEL, format_=text_format)
-            conllu = "{}\n{}".format(conllu, file_conllu)
+            new_conllu = parse_text(text, UDPIPE_MODEL, format_=text_format)
+            conllu = "{}\n{}".format(conllu, new_conllu)
 
     additional_relations = True
     entities_limit = int(request.form["entities_limit"])

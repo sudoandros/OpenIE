@@ -419,6 +419,29 @@ class RelGraph:
 
     def merge_relations(self):
         while True:
+            same_name_nodes_to_merge_lists = self._find_same_name_nodes_to_merge()
+            if len(same_name_nodes_to_merge_lists) > 0:
+                for same_name_nodes_to_merge in same_name_nodes_to_merge_lists:
+                    logging.info(
+                        (
+                            "Found {n_to_merge} same name arguments to merge:\n"
+                            "{args}\n"
+                            "Clusters of arguments: \n"
+                            "{clusters}"
+                        ).format(
+                            n_to_merge=len(same_name_nodes_to_merge),
+                            args="\n".join(
+                                self._graph.nodes[node]["label"]
+                                for node in same_name_nodes_to_merge
+                            ),
+                            clusters="\n".join(
+                                str(self._graph.nodes[node]["feat_type"])
+                                for node in same_name_nodes_to_merge
+                            ),
+                        )
+                    )
+                    self._merge_nodes(same_name_nodes_to_merge)
+
             nodes_to_merge = []
             edges_to_merge = []
 
@@ -569,10 +592,7 @@ class RelGraph:
             )
             self._graph[source][target][key]["weight"] += weight
 
-    def _add_node(
-        self, lemmas, description, label=None, weight=1, vector=None, feat_type=0
-    ):
-        name = lemmas
+    def _add_node(self, lemmas, description, label, weight=1, vector=None, feat_type=0):
         if isinstance(description, str):
             description = set([description])
         else:
@@ -581,9 +601,11 @@ class RelGraph:
             feat_type = set([feat_type])
         else:
             feat_type = set(feat_type)
-        if name not in self._graph:
+        node = "{} + {}".format(lemmas, str(feat_type))
+        if node not in self._graph:
             self._graph.add_node(
-                name,
+                node,
+                lemmas=lemmas,
                 label=label,
                 description=description,
                 weight=weight,
@@ -592,18 +614,21 @@ class RelGraph:
             )
         else:
             # this node already exists
-            self._graph.nodes[name]["description"] = (
-                description | self._graph.nodes[name]["description"]
+            self._graph.nodes[node]["label"] = " | ".join(
+                set(self._graph.nodes[node]["label"].split(" | ") + label.split(" | "))
             )
-            self._graph.nodes[name]["feat_type"] = (
-                feat_type | self._graph.nodes[name]["feat_type"]
+            self._graph.nodes[node]["description"] = (
+                description | self._graph.nodes[node]["description"]
             )
-            self._graph.nodes[name]["vector"] = (
-                self._graph.nodes[name]["weight"] * self._graph.nodes[name]["vector"]
+            self._graph.nodes[node]["feat_type"] = (
+                feat_type | self._graph.nodes[node]["feat_type"]
+            )
+            self._graph.nodes[node]["vector"] = (
+                self._graph.nodes[node]["weight"] * self._graph.nodes[node]["vector"]
                 + vector * weight
             ) / 2
-            self._graph.nodes[name]["weight"] += weight
-        return name
+            self._graph.nodes[node]["weight"] += weight
+        return node
 
     def _inherit_relations(self):
         modified = True
@@ -775,6 +800,33 @@ class RelGraph:
                     edges.discard((s2, t2, key2))
         return edges
 
+    def _find_same_name_nodes_to_merge(self):
+        labels_edges_dict = {}
+        for s, t, k in self._graph.edges:
+            labels = (
+                self._graph.nodes[s]["label"],
+                self._graph[s][t][k]["label"],
+                self._graph.nodes[t]["label"],
+            )
+            if labels not in labels_edges_dict:
+                labels_edges_dict[labels] = [(s, t, k)]
+            else:
+                labels_edges_dict[labels].append((s, t, k))
+
+        res = []
+        seen_nodes = set()
+        for edge_list in labels_edges_dict.values():
+            if len(edge_list) > 1:
+                sources = frozenset(s for s, _, _ in edge_list if s not in seen_nodes)
+                targets = frozenset(t for _, t, _ in edge_list if t not in seen_nodes)
+                if len(sources) > 1:
+                    res.append(sources)
+                    seen_nodes.update(sources | targets)
+                if len(targets) > 1:
+                    res.append(targets)
+                    seen_nodes.update(sources | targets)
+        return res
+
     def _merge_nodes(self, nodes):
         main_node, *other_nodes = sorted(
             nodes,
@@ -782,19 +834,18 @@ class RelGraph:
             reverse=True,
         )
 
+        feat_type = self._graph.nodes[main_node]["feat_type"]
+        for node in other_nodes:
+            feat_type |= self._graph.nodes[node]["feat_type"]
         for node in other_nodes:
             self._add_node(
-                main_node,
+                self._graph.nodes[main_node]["lemmas"],
                 self._graph.nodes[node]["description"],
                 label=self._graph.nodes[node]["label"],
                 weight=self._graph.nodes[node]["weight"],
                 vector=self._graph.nodes[node]["vector"],
-                feat_type=self._graph.nodes[node]["feat_type"],
+                feat_type=feat_type,
             )
-        self._graph.nodes[main_node]["label"] = " | ".join(
-            [self._graph.nodes[main_node]["label"]]
-            + [self._graph.nodes[node]["label"] for node in other_nodes]
-        )
 
         for source, target, key in self._graph.edges(other_nodes, keys=True):
             edge_ends = None
@@ -809,7 +860,7 @@ class RelGraph:
                 self._graph.edges[source, target, key]["deprel"],
                 self._graph.edges[source, target, key]["description"],
                 weight=self._graph.edges[source, target, key]["weight"],
-                feat_type=self._graph.edges[source, target, key]["feat_type"],
+                feat_type=feat_type,
             )
 
         for node in other_nodes:
@@ -945,7 +996,7 @@ class RelGraph:
         for node in self._graph:
             self._graph.nodes[node]["node_type"] = "argument"
         for source, target, key, attr in list(self._graph.edges(data=True, keys=True)):
-            name = "{}({}; {})".format(
+            node = "{}({}; {})".format(
                 self._graph.edges[source, target, key]["label"], source, target
             )
             new_attr = deepcopy(attr)
@@ -959,9 +1010,9 @@ class RelGraph:
             new_attr["weight"] = min(
                 self._graph.nodes[source]["weight"], self._graph.nodes[target]["weight"]
             )
-            self._graph.add_node(name, **new_attr)
-            self._graph.add_edge(source, name)
-            self._graph.add_edge(name, target)
+            self._graph.add_node(node, **new_attr)
+            self._graph.add_edge(source, node)
+            self._graph.add_edge(node, target)
             self._graph.remove_edge(source, target, key=key)
 
     @staticmethod
