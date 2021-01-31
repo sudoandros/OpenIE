@@ -2,15 +2,15 @@
 
 {% block content %}
 <h1>Извлеченные отношения</h1>
-<a href="{{ url_for('download', directory='graphs', filename=graph_filename) }}">
+<a href="{{ url_for('download', type_='graph', filename=graph_filename) }}">
     Загрузить граф отношений
 </a>
 <br>
-<a href="{{ url_for('download', directory='jsons', filename=json_filename) }}">
+<a href="{{ url_for('download', type_='json', filename=json_filename) }}">
     Загрузить отношения в формате JSON
 </a>
 <br>
-<a href="{{ url_for('download', directory='conllu', filename=conllu_filename) }}">
+<a href="{{ url_for('download', type_='conllu', filename=conllu_filename) }}">
     Загрузить результат синтаксического разбора в формате CoNLL-U
 </a>
 {% for sentence in relations_dict %}

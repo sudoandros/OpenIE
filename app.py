@@ -114,8 +114,16 @@ def extract():
     )
 
 
-@app.route("/download/<directory>/<filename>", methods=["GET"])
-def download(directory, filename):
+@app.route("/download/<type_>/<filename>", methods=["GET"])
+def download(type_, filename):
+    if type_ == "graph":
+        directory = app.config["GRAPH_DIR"]
+    elif type_ == "json":
+        directory = app.config["JSON_DIR"]
+    elif type_ == "conllu":
+        directory = app.config["CONLLU_DIR"]
+    else:
+        raise ValueError("Unknown download type")
     return send_from_directory(directory, filename, as_attachment=True)
 
 
