@@ -11,6 +11,7 @@ from typing import List, NamedTuple, Sequence
 
 import gensim.downloader
 import networkx as nx
+import networkx.algorithms.components
 import numpy as np
 from scipy.spatial import distance
 from sklearn.metrics import silhouette_score
@@ -20,7 +21,7 @@ from tqdm import tqdm
 from udpipe_model import UDPipeModel
 
 MIN_CLUSTER_SIZE = 50
-COSINE_THRESHOLD = 0.3
+NODE_DISTANCE_THRESHOLD = 0.3
 
 
 class Reltuple(NamedTuple):
@@ -624,8 +625,7 @@ class RelGraph:
                 feat_type | self._graph.nodes[node]["feat_type"]
             )
             self._graph.nodes[node]["vector"] = (
-                self._graph.nodes[node]["weight"] * self._graph.nodes[node]["vector"]
-                + vector * weight
+                self._graph.nodes[node]["vector"] + vector
             ) / 2
             self._graph.nodes[node]["weight"] += weight
         return node
@@ -731,15 +731,17 @@ class RelGraph:
             reverse=True,
         )
         for node in other_nodes:
-            if (
-                distance.cosine(
-                    self._graph.nodes[main_node]["vector"],
-                    self._graph.nodes[node]["vector"],
-                )
-                > COSINE_THRESHOLD
-            ):
+            if self._nodes_distance(main_node, node) > NODE_DISTANCE_THRESHOLD:
                 res.discard(node)
         return res
+
+    def _nodes_distance(self, node1, node2):
+        vector1: np.ndarray = self._graph.nodes[node1]["vector"]
+        vector2: np.ndarray = self._graph.nodes[node2]["vector"]
+        if not vector1.any() or not vector2.any():
+            return float("inf")
+        else:
+            return float(distance.cosine(vector1, vector2))
 
     def _find_nodes_to_merge(self, source=None, target=None, key=None):
         if source is not None and key is not None:
@@ -1131,7 +1133,7 @@ class TextReltuples:
         return res_labels.tolist()
 
 
-def _get_phrase_vector(sentence, words_ids, w2v_model):
+def _get_phrase_vector(sentence, words_ids, w2v_model) -> np.ndarray:
     if words_ids == "all":
         words_ids = range(len(sentence.words))
     vector = np.zeros(300)
