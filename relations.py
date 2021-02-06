@@ -7,7 +7,7 @@ from copy import deepcopy
 from functools import reduce
 from itertools import groupby
 from pathlib import Path
-from typing import List, NamedTuple, Sequence
+from typing import Iterable, List, NamedTuple, Sequence, Set
 
 import gensim.downloader
 import networkx as nx
@@ -711,7 +711,7 @@ class RelGraph:
             )
         }
 
-    def _filter_node_merge_candidates(self, nodes):
+    def _filter_node_merge_candidates(self, nodes: Set[str]):
         res = nodes.copy()
         for node1 in res.copy():
             for node2 in res.difference([node1]):
@@ -725,15 +725,26 @@ class RelGraph:
         if len(res) < 2:
             return res
 
-        main_node, *other_nodes = sorted(
-            res,
+        res = self._find_nodes_inside_radius(res, NODE_DISTANCE_THRESHOLD)
+        return res
+
+    def _find_nodes_inside_radius(self, nodes: Iterable[str], radius: float):
+        nodes = sorted(
+            nodes,
             key=lambda node: (self._graph.nodes[node]["weight"], node),
             reverse=True,
         )
-        for node in other_nodes:
-            if self._nodes_distance(main_node, node) > NODE_DISTANCE_THRESHOLD:
-                res.discard(node)
-        return res
+        for central_node in nodes:
+            group = {central_node}
+            for node in nodes:
+                if (
+                    self._nodes_distance(central_node, node) <= radius
+                    and node != central_node
+                ):
+                    group.add(node)
+            if len(group) > 1:
+                return group
+        return {nodes[0]}
 
     def _nodes_distance(self, node1, node2):
         vector1: np.ndarray = self._graph.nodes[node1]["vector"]
