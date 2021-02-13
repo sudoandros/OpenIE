@@ -711,13 +711,16 @@ class RelGraph:
             )
         }
 
-    def _filter_node_merge_candidates(self, nodes: Set[str]):
+    def _filter_node_merge_candidates(self, nodes: Set[str], distance_threshold: float):
         res = nodes.copy()
-        for node1 in res.copy():
-            for node2 in res.difference([node1]):
-                if self._graph.has_edge(node1, node2) or (
-                    self._graph.nodes[node1]["description"]
-                    & self._graph.nodes[node2]["description"]
+        for node1 in nodes:
+            for node2 in nodes:
+                if node1 != node2 and (
+                    self._graph.has_edge(node1, node2)
+                    or (
+                        self._graph.nodes[node1]["description"]
+                        & self._graph.nodes[node2]["description"]
+                    )
                 ):
                     res.discard(node1)
                     res.discard(node2)
@@ -725,7 +728,7 @@ class RelGraph:
         if len(res) < 2:
             return res
 
-        res = self._find_nodes_inside_radius(res, NODE_DISTANCE_THRESHOLD)
+        res = self._find_nodes_inside_radius(res, distance_threshold)
         return res
 
     def _find_nodes_inside_radius(self, nodes: Iterable[str], radius: float):
@@ -765,7 +768,7 @@ class RelGraph:
         if len(res) < 2:
             return res
 
-        res = self._filter_node_merge_candidates(res)
+        res = self._filter_node_merge_candidates(res, NODE_DISTANCE_THRESHOLD)
         return res
 
     def _find_edges_to_merge(self, source, target):
