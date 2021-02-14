@@ -16,9 +16,8 @@ from flask import (
 from flask_wtf import FlaskForm
 from wtforms import BooleanField, IntegerField, MultipleFileField, SubmitField
 
-from relations import TextReltuples
-from syntax import parse_text
-from udpipe_model import UDPipeModel
+import openie.syntax
+from openie.relations.text import TextReltuples
 
 logging.basicConfig(
     handlers=[logging.FileHandler("logs/server.log", "a", "utf-8")],
@@ -28,10 +27,11 @@ logging.basicConfig(
 
 app = Flask(__name__)
 app.config.from_json("instance/config.json")
-UDPIPE_MODEL = UDPipeModel(app.config["UDPIPE_MODEL"])
+TZ_MOSCOW = timezone(timedelta(hours=3))
+UDPIPE_MODEL = openie.syntax.UDPipeModel(app.config["UDPIPE_MODEL"])
 W2V_MODEL = gensim.downloader.load("word2vec-ruscorpora-300")
 with open("stopwords.txt", mode="r", encoding="utf-8") as file:
-    STOPWORDS = list(file.read().split())
+    STOPWORDS = file.read().split()
 
 
 def guess_encoding(content):
@@ -65,13 +65,13 @@ def index(title=None):
 @app.route("/parse", methods=["POST"])
 def parse():
     text = request.form["text"]
-    return parse_text(text, UDPIPE_MODEL)
+    return openie.syntax.parse(text, UDPIPE_MODEL)
 
 
 @app.route("/extract-relations", methods=["POST"])
 def extract():
-    tz_moscow = timezone(timedelta(hours=3))
-    timestamp = datetime.now(tz=tz_moscow).strftime("d%Y-%m-%dt%H-%M-%S.%f")
+    TZ_MOSCOW = timezone(timedelta(hours=3))
+    timestamp = datetime.now(tz=TZ_MOSCOW).strftime("d%Y-%m-%dt%H-%M-%S.%f")
     conllu = ""
     for text_file in request.files.getlist("text_files"):
         file_content = text_file.read()
@@ -79,16 +79,16 @@ def extract():
         text = file_content.decode(encoding)
         text_format = Path(text_file.filename).suffix[1:]
         if request.form.get("is_conllu") == "y":
-            conllu = text
+            new_conllu = text
         else:
-            new_conllu = parse_text(text, UDPIPE_MODEL, format_=text_format)
-            conllu = "{}\n{}".format(conllu, new_conllu)
+            new_conllu = openie.syntax.parse(text, UDPIPE_MODEL, format_=text_format)
+        conllu = "{}\n{}".format(conllu, new_conllu)
 
     additional_relations = True
     entities_limit = int(request.form["entities_limit"])
 
     text_reltuples = TextReltuples(
-        conllu, UDPIPE_MODEL, W2V_MODEL, STOPWORDS, additional_relations, entities_limit
+        conllu, W2V_MODEL, STOPWORDS, additional_relations, entities_limit
     )
     graph_filename = "{}.gexf".format(timestamp)
     text_reltuples.graph.save(Path(app.config["GRAPH_DIR"], graph_filename))
