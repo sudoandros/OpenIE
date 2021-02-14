@@ -420,27 +420,16 @@ class RelGraph:
 
     def merge_relations(self):
         while True:
-            same_name_nodes_to_merge_lists = self._find_same_name_nodes_to_merge()
-            if len(same_name_nodes_to_merge_lists) > 0:
-                for same_name_nodes_to_merge in same_name_nodes_to_merge_lists:
-                    logging.info(
-                        (
-                            "Found {n_to_merge} same name arguments to merge:\n"
-                            "{args}\n"
-                            "Clusters of arguments: \n"
-                            "{clusters}"
-                        ).format(
-                            n_to_merge=len(same_name_nodes_to_merge),
-                            args="\n".join(
-                                self._graph.nodes[node]["label"]
-                                for node in same_name_nodes_to_merge
-                            ),
-                            clusters="\n".join(
-                                str(self._graph.nodes[node]["feat_type"])
-                                for node in same_name_nodes_to_merge
-                            ),
-                        )
-                    )
+            same_name_nodes_to_merge_sets = set(self._find_same_name_nodes_to_merge())
+            if len(same_name_nodes_to_merge_sets) > 0:
+                for same_name_nodes_to_merge in same_name_nodes_to_merge_sets:
+                    self._merge_nodes(same_name_nodes_to_merge)
+
+            same_name_nodes_to_merge_sets = (
+                self._find_same_name_nodes_to_merge_weak_rule()
+            )
+            if len(same_name_nodes_to_merge_sets) > 0:
+                for same_name_nodes_to_merge in same_name_nodes_to_merge_sets:
                     self._merge_nodes(same_name_nodes_to_merge)
 
             nodes_to_merge = []
@@ -819,6 +808,8 @@ class RelGraph:
     def _find_same_name_nodes_to_merge(self):
         labels_edges_dict = {}
         for s, t, k in self._graph.edges:
+            if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
+                continue
             labels = (
                 self._graph.nodes[s]["label"],
                 self._graph[s][t][k]["label"],
@@ -829,18 +820,103 @@ class RelGraph:
             else:
                 labels_edges_dict[labels].append((s, t, k))
 
-        res = []
-        seen_nodes = set()
-        for edge_list in labels_edges_dict.values():
-            if len(edge_list) > 1:
-                sources = frozenset(s for s, _, _ in edge_list if s not in seen_nodes)
-                targets = frozenset(t for _, t, _ in edge_list if t not in seen_nodes)
-                if len(sources) > 1:
-                    res.append(sources)
-                    seen_nodes.update(sources | targets)
-                if len(targets) > 1:
-                    res.append(targets)
-                    seen_nodes.update(sources | targets)
+        res = set()
+        seen = set()
+        for edges in labels_edges_dict.values():
+            if len(edges) < 2:
+                continue
+            sources_to_merge = frozenset(s for s, _, _ in edges if s not in seen)
+            if len(sources_to_merge) > 1:
+                res.add(sources_to_merge)
+                logging.info(
+                    f"Found {len(sources_to_merge)} same name sources to merge:\n"
+                    + "\n".join(node for node in sources_to_merge)
+                )
+                seen.update(sources_to_merge)
+            targets_to_merge = frozenset(t for _, t, _ in edges if t not in seen)
+            if len(targets_to_merge) > 1:
+                logging.info(
+                    f"Found {len(targets_to_merge)} same name targets to merge:\n"
+                    + "\n".join(node for node in targets_to_merge)
+                )
+                res.add(targets_to_merge)
+                seen.update(targets_to_merge)
+        return res
+
+    def _find_same_name_nodes_to_merge_weak_rule(self):
+        # TODO merge with `_find_same_name_nodes_to_merge` into a single function
+        return (
+            self._find_same_name_sources_to_merge_weak_rule()
+            | self._find_same_name_targets_to_merge_weak_rule()
+        )
+
+    def _find_same_name_sources_to_merge_weak_rule(self):
+        labels_edges_dict = {}
+        for s, t, k in self._graph.edges:
+            if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
+                continue
+            labels = (self._graph.nodes[s]["label"], self._graph[s][t][k]["label"])
+            if labels not in labels_edges_dict:
+                labels_edges_dict[labels] = {(s, t, k)}
+            else:
+                labels_edges_dict[labels].add((s, t, k))
+
+        res = set()
+        seen = set()
+        for edges in labels_edges_dict.values():
+            if len(edges) < 2:
+                continue
+            targets = {t for _, t, _ in edges}
+            targets = self._filter_node_merge_candidates(
+                targets, NODE_DISTANCE_THRESHOLD
+            )
+            sources_to_merge = frozenset(
+                s for s, t, _ in edges if t in targets and s not in seen
+            )
+            if len(sources_to_merge) < 2:
+                continue
+            logging.info(
+                "Found same name sources to merge (weak rule):\n"
+                "\n".join(sources_to_merge) + "\n"
+                "because of the next similar targets:\n"
+                "\n".join(targets)
+            )
+            res.add(sources_to_merge)
+            seen.update(sources_to_merge)
+        return res
+
+    def _find_same_name_targets_to_merge_weak_rule(self):
+        labels_edges_dict = {}
+        for s, t, k in self._graph.edges:
+            if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
+                continue
+            labels = (self._graph[s][t][k]["label"], self._graph.nodes[t]["label"])
+            if labels not in labels_edges_dict:
+                labels_edges_dict[labels] = {(s, t, k)}
+            else:
+                labels_edges_dict[labels].add((s, t, k))
+        res = set()
+        seen = set()
+        for edges in labels_edges_dict.values():
+            if len(edges) < 2:
+                continue
+            sources = {s for s, _, _ in edges}
+            sources = self._filter_node_merge_candidates(
+                sources, NODE_DISTANCE_THRESHOLD
+            )
+            targets_to_merge = frozenset(
+                t for s, t, _ in edges if s in sources and t not in seen
+            )
+            if len(targets_to_merge) < 2:
+                continue
+            logging.info(
+                "Found same name targets to merge (weak rule):\n"
+                "{}\n".format("\n".join(targets_to_merge))
+                + "because of the next similar sources:\n"
+                "{}".format("\n".join(sources))
+            )
+            res.add(targets_to_merge)
+            seen.update(targets_to_merge)
         return res
 
     def _merge_nodes(self, nodes):
