@@ -328,11 +328,11 @@ class RelGraph:
             target
             for target in self._graph.successors(source)
             if self._graph.has_edge(source, target, key=key)
-            and self._graph[source][target][key]["label"]
-            not in ["_is_a_", "_relates_to_"]
             and (
-                self._graph.nodes[source]["feat_type"]
-                & self._graph.nodes[target]["feat_type"]
+                self._graph[source][target][key]["label"]
+                not in ["_is_a_", "_relates_to_"]
+                or self._graph.nodes[source]["label"]
+                == self._graph.nodes[target]["label"]
             )
         }
 
@@ -341,11 +341,11 @@ class RelGraph:
             source
             for source in self._graph.predecessors(target)
             if self._graph.has_edge(source, target, key=key)
-            and self._graph[source][target][key]["label"]
-            not in ["_is_a_", "_relates_to_"]
             and (
-                self._graph.nodes[source]["feat_type"]
-                & self._graph.nodes[target]["feat_type"]
+                self._graph[source][target][key]["label"]
+                not in ["_is_a_", "_relates_to_"]
+                or self._graph.nodes[source]["label"]
+                == self._graph.nodes[target]["label"]
             )
         }
 
