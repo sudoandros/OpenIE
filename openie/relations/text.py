@@ -3,7 +3,7 @@ import logging
 import xml.etree.ElementTree as ET
 from copy import deepcopy
 from functools import reduce
-from itertools import groupby
+from itertools import groupby, product
 from typing import Iterable, List, Sequence, Set
 
 import networkx as nx
@@ -459,15 +459,14 @@ class RelGraph:
         for s, t, k in self._graph.edges:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
                 continue
-            labels = (
-                self._graph.nodes[s]["label"],
-                self._graph[s][t][k]["label"],
-                self._graph.nodes[t]["label"],
-            )
-            if labels not in labels_edges_dict:
-                labels_edges_dict[labels] = [(s, t, k)]
-            else:
-                labels_edges_dict[labels].append((s, t, k))
+            source_labels = self._graph.nodes[s]["label"].split(" | ")
+            edge_labels = self._graph[s][t][k]["label"].split(" | ")
+            target_labels = self._graph.nodes[t]["label"].split(" | ")
+            for labels in product(source_labels, edge_labels, target_labels):
+                if labels not in labels_edges_dict:
+                    labels_edges_dict[labels] = [(s, t, k)]
+                else:
+                    labels_edges_dict[labels].append((s, t, k))
 
         res = set()
         seen = set()
@@ -479,14 +478,18 @@ class RelGraph:
                 res.add(sources_to_merge)
                 logging.info(
                     f"Found {len(sources_to_merge)} same name sources to merge:\n"
-                    + "\n".join(node for node in sources_to_merge)
+                    + "\n".join(
+                        self._graph.nodes[node]["label"] for node in sources_to_merge
+                    )
                 )
                 seen.update(sources_to_merge)
             targets_to_merge = frozenset(t for _, t, _ in edges if t not in seen)
             if len(targets_to_merge) > 1:
                 logging.info(
                     f"Found {len(targets_to_merge)} same name targets to merge:\n"
-                    + "\n".join(node for node in targets_to_merge)
+                    + "\n".join(
+                        self._graph.nodes[node]["label"] for node in targets_to_merge
+                    )
                 )
                 res.add(targets_to_merge)
                 seen.update(targets_to_merge)
@@ -504,11 +507,13 @@ class RelGraph:
         for s, t, k in self._graph.edges:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
                 continue
-            labels = (self._graph.nodes[s]["label"], self._graph[s][t][k]["label"])
-            if labels not in labels_edges_dict:
-                labels_edges_dict[labels] = {(s, t, k)}
-            else:
-                labels_edges_dict[labels].add((s, t, k))
+            source_labels = self._graph.nodes[s]["label"].split(" | ")
+            edge_labels = self._graph[s][t][k]["label"].split(" | ")
+            for labels in product(source_labels, edge_labels):
+                if labels not in labels_edges_dict:
+                    labels_edges_dict[labels] = {(s, t, k)}
+                else:
+                    labels_edges_dict[labels].add((s, t, k))
 
         res = set()
         seen = set()
@@ -516,9 +521,7 @@ class RelGraph:
             if len(edges) < 2:
                 continue
             targets = {t for _, t, _ in edges}
-            targets = self._filter_node_merge_candidates(
-                targets, NODE_DISTANCE_THRESHOLD
-            )
+            targets = self._filter_node_merge_candidates(targets, 0.7)
             sources_to_merge = frozenset(
                 s for s, t, _ in edges if t in targets and s not in seen
             )
@@ -526,9 +529,12 @@ class RelGraph:
                 continue
             logging.info(
                 "Found same name sources to merge (weak rule):\n"
-                "\n".join(sources_to_merge) + "\n"
-                "because of the next similar targets:\n"
-                "\n".join(targets)
+                + "\n".join(
+                    self._graph.nodes[node]["label"] for node in sources_to_merge
+                )
+                + "\n"
+                + "because of the next similar targets:\n"
+                + "\n".join(self._graph.nodes[node]["label"] for node in targets)
             )
             res.add(sources_to_merge)
             seen.update(sources_to_merge)
@@ -540,10 +546,14 @@ class RelGraph:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
                 continue
             labels = (self._graph[s][t][k]["label"], self._graph.nodes[t]["label"])
-            if labels not in labels_edges_dict:
-                labels_edges_dict[labels] = {(s, t, k)}
-            else:
-                labels_edges_dict[labels].add((s, t, k))
+            edge_labels = self._graph[s][t][k]["label"].split(" | ")
+            target_labels = self._graph.nodes[t]["label"].split(" | ")
+            for labels in product(edge_labels, target_labels):
+                if labels not in labels_edges_dict:
+                    labels_edges_dict[labels] = {(s, t, k)}
+                else:
+                    labels_edges_dict[labels].add((s, t, k))
+
         res = set()
         seen = set()
         for edges in labels_edges_dict.values():
@@ -559,10 +569,13 @@ class RelGraph:
             if len(targets_to_merge) < 2:
                 continue
             logging.info(
-                "Found same name targets to merge (weak rule):\n"
-                "{}\n".format("\n".join(targets_to_merge))
-                + "because of the next similar sources:\n"
-                "{}".format("\n".join(sources))
+                "Found same name sources to merge (weak rule):\n"
+                + "\n".join(
+                    self._graph.nodes[node]["label"] for node in targets_to_merge
+                )
+                + "\n"
+                + "because of the next similar targets:\n"
+                + "\n".join(self._graph.nodes[node]["label"] for node in sources)
             )
             res.add(targets_to_merge)
             seen.update(targets_to_merge)
