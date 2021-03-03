@@ -174,53 +174,26 @@ class RelGraph:
             key = label
         else:
             key = "{} + {}".format(lemmas, deprel)
-        if isinstance(description, str):
-            description = set([description])
-        else:
-            description = set(description)
-        if isinstance(feat_type, int):
-            feat_type = set([feat_type])
-        else:
-            feat_type = set(feat_type)
+        description = _to_set_if_not_already(description)
+        feat_type = _to_set_if_not_already(feat_type)
         if not self._graph.has_edge(source, target, key=key):
+            color = {"b": 0, "g": 0, "r": 0}
             if label == "_is_a_":
-                self._graph.add_edge(
-                    source,
-                    target,
-                    key=key,
-                    label=label,
-                    lemmas=lemmas,
-                    deprel=deprel,
-                    description=description,
-                    weight=weight,
-                    feat_type=feat_type,
-                    viz={"color": {"b": 255, "g": 0, "r": 0}},
-                )
+                color = {"b": 255, "g": 0, "r": 0}
             elif label == "_relates_to_":
-                self._graph.add_edge(
-                    source,
-                    target,
-                    key=key,
-                    label=label,
-                    lemmas=lemmas,
-                    deprel=deprel,
-                    description=description,
-                    weight=weight,
-                    feat_type=feat_type,
-                    viz={"color": {"b": 0, "g": 255, "r": 0}},
-                )
-            else:
-                self._graph.add_edge(
-                    source,
-                    target,
-                    key=key,
-                    label=label,
-                    lemmas=lemmas,
-                    deprel=deprel,
-                    description=description,
-                    weight=weight,
-                    feat_type=feat_type,
-                )
+                color = {"b": 0, "g": 255, "r": 0}
+            self._graph.add_edge(
+                source,
+                target,
+                key=key,
+                label=label,
+                lemmas=lemmas,
+                deprel=deprel,
+                description=description,
+                weight=weight,
+                feat_type=feat_type,
+                viz={"color": color},
+            )
         else:
             # this edge already exists
             self._graph[source][target][key]["description"] = (
@@ -232,14 +205,8 @@ class RelGraph:
             self._graph[source][target][key]["weight"] += weight
 
     def _add_node(self, lemmas, description, label, weight=1, vector=None, feat_type=0):
-        if isinstance(description, str):
-            description = set([description])
-        else:
-            description = set(description)
-        if isinstance(feat_type, int):
-            feat_type = set([feat_type])
-        else:
-            feat_type = set(feat_type)
+        description = _to_set_if_not_already(description)
+        feat_type = _to_set_if_not_already(feat_type)
         node = "{} + {}".format(lemmas, str(feat_type))
         if node not in self._graph:
             self._graph.add_node(
@@ -877,3 +844,11 @@ class TextReltuples:
                 max_sil_score = score
                 res_labels = clusterer.labels_
         return res_labels.tolist()
+
+
+def _to_set_if_not_already(attr_key):
+    if isinstance(attr_key, (str, int, float)):
+        return {attr_key}
+    else:
+        return set(attr_key)
+
