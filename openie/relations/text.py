@@ -2,8 +2,7 @@ import io
 import logging
 import xml.etree.ElementTree as ET
 from copy import deepcopy
-from functools import reduce
-from itertools import groupby, product
+from itertools import chain, groupby, product
 from typing import Iterable, List, Sequence, Set
 
 import networkx as nx
@@ -549,55 +548,62 @@ class RelGraph:
         return res
 
     def _merge_nodes(self, nodes):
-        main_node, *other_nodes = sorted(
-            nodes,
-            key=lambda node: (self._graph.nodes[node]["weight"], node),
-            reverse=True,
+        def new_set_attr_value(attr_key):
+            res = set()
+            for node in nodes:
+                res |= _to_set_if_not_already(self._graph.nodes[node][attr_key])
+            return res
+
+        def new_str_attr_value(attr_key):
+            res = set()
+            for node in nodes:
+                res |= set(self._graph.nodes[node][attr_key].split(" | "))
+            return " | ".join(res)
+
+        new_lemmas = new_str_attr_value("lemmas")
+        new_label = new_str_attr_value("label")
+        new_description = new_set_attr_value("description")
+        new_feat_type = new_set_attr_value("feat_type")
+        new_weight = sum(self._graph.nodes[node]["weight"] for node in nodes)
+        new_vector = sum(self._graph.nodes[node]["vector"] for node in nodes) / len(
+            nodes
+        )
+        new_node = self._add_node(
+            new_lemmas,
+            new_description,
+            new_label,
+            new_weight,
+            new_vector,
+            new_feat_type,
         )
 
-        feat_type = self._graph.nodes[main_node]["feat_type"]
-        for node in other_nodes:
-            feat_type |= self._graph.nodes[node]["feat_type"]
-        for node in other_nodes:
-            self._add_node(
-                self._graph.nodes[main_node]["lemmas"],
-                self._graph.nodes[node]["description"],
-                label=self._graph.nodes[node]["label"],
-                weight=self._graph.nodes[node]["weight"],
-                vector=self._graph.nodes[node]["vector"],
-                feat_type=feat_type,
-            )
-
-        for source, target, key in self._graph.edges(other_nodes, keys=True):
-            edge_ends = None
-            if source in other_nodes:  # "out" edge
-                edge_ends = (main_node, target)
-            elif target in other_nodes:  # "in" edge
-                edge_ends = (source, main_node)
+        for source, target, key in self._graph.edges(nodes, keys=True):
+            new_source = None
+            new_target = None
+            if source in nodes:  # "out" edge
+                new_source, new_target = (new_node, target)
+            elif target in nodes:  # "in" edge
+                new_source, new_target = (source, new_node)
             self._add_edge(
-                *edge_ends,
+                new_source,
+                new_target,
                 self._graph.edges[source, target, key]["label"],
                 self._graph.edges[source, target, key]["lemmas"],
                 self._graph.edges[source, target, key]["deprel"],
                 self._graph.edges[source, target, key]["description"],
                 weight=self._graph.edges[source, target, key]["weight"],
-                feat_type=feat_type,
+                feat_type=new_feat_type,
             )
 
-        for node in other_nodes:
+        for node in nodes:
             self._graph.remove_node(node)
 
     def _merge_edges(self, edges):
         def new_str_attr_value(attr_key):
-            return " | ".join(
-                reduce(
-                    lambda x, y: x | y,
-                    (
-                        set(self._graph[source][target][key][attr_key].split(" | "))
-                        for source, target, key in edges
-                    ),
-                )
-            )
+            res = set()
+            for source, target, key in edges:
+                res |= set(self._graph[source][target][key][attr_key].split(" | "))
+            return " | ".join(res)
 
         new_label = new_str_attr_value("label")
         new_lemmas = new_str_attr_value("lemmas")
