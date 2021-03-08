@@ -64,7 +64,6 @@ class RelGraph:
                 sentence_text,
                 feat_type=cluster,
             )
-        self._inherit_relations()
 
     def merge_relations(self):
         while True:
@@ -176,6 +175,7 @@ class RelGraph:
         description = _to_set_if_not_already(description)
         feat_type = _to_set_if_not_already(feat_type)
         if not self._graph.has_edge(source, target, key=key):
+            # it's a new edge
             color = {"b": 0, "g": 0, "r": 0}
             if label == "_is_a_":
                 color = {"b": 255, "g": 0, "r": 0}
@@ -202,6 +202,67 @@ class RelGraph:
                 feat_type | self._graph[source][target][key]["feat_type"]
             )
             self._graph[source][target][key]["weight"] += weight
+
+        self._inherit_relation(source, target, key)
+        return key
+
+    def _inherit_relation(self, source, target, key):
+        if key == "_is_a_":
+            # it's a "is a" relation
+            # inherit all verb relations from up the source to the target
+            edges = list(self._graph.in_edges(source, keys=True, data=True)) + list(
+                self._graph.out_edges(source, keys=True, data=True),
+            )
+            for s, t, key, attr in edges:
+                if key in ["_is_a_", "_relates_to_"]:
+                    continue
+                new_source, new_target = None, None
+                if s == source:  # is "out" edge
+                    new_source, new_target = target, t
+                elif t == source:  # is "in" edge
+                    new_source, new_target = s, target
+                self._add_edge(
+                    new_source,
+                    new_target,
+                    attr["label"],
+                    attr["lemmas"],
+                    attr["deprel"],
+                    attr["description"],
+                    weight=attr["weight"],
+                    feat_type=attr["feat_type"],
+                )
+        elif key != "_relates_to_":
+            # it's a verb relation
+            # inherit this relation down the "is a" relations for both the
+            # source and the target
+            successors = list(self._graph.successors(source))
+            for node in successors:
+                if not self._graph.has_edge(source, node, key="_is_a_"):
+                    continue
+                self._add_edge(
+                    node,
+                    target,
+                    self._graph[source][target][key]["label"],
+                    self._graph[source][target][key]["lemmas"],
+                    self._graph[source][target][key]["deprel"],
+                    self._graph[source][target][key]["description"],
+                    weight=self._graph[source][target][key]["weight"],
+                    feat_type=self._graph[source][target][key]["feat_type"],
+                )
+            successors = list(self._graph.successors(target))
+            for node in successors:
+                if not self._graph.has_edge(target, node, key="_is_a_"):
+                    continue
+                self._add_edge(
+                    source,
+                    node,
+                    self._graph[source][target][key]["label"],
+                    self._graph[source][target][key]["lemmas"],
+                    self._graph[source][target][key]["deprel"],
+                    self._graph[source][target][key]["description"],
+                    weight=self._graph[source][target][key]["weight"],
+                    feat_type=self._graph[source][target][key]["feat_type"],
+                )
 
     def _add_node(self, lemmas, description, label, weight=1, vector=None, feat_type=0):
         description = _to_set_if_not_already(description)
@@ -233,61 +294,6 @@ class RelGraph:
             ) / 2
             self._graph.nodes[node]["weight"] += weight
         return node
-
-    def _inherit_relations(self):
-        modified = True
-        while modified:
-            modified = False
-            for node in self._graph:
-                predecessors_by_is_a = {
-                    n
-                    for n in self._graph.predecessors(node)
-                    if self._graph.has_edge(n, node, key="_is_a_")
-                }
-                in_verb_rel_edges = [
-                    (source, key, attr)
-                    for n in predecessors_by_is_a
-                    for source, _, key, attr in self._graph.in_edges(
-                        n, data=True, keys=True
-                    )
-                    if key not in ["_is_a_", "_relates_to_"]
-                ]
-                out_verb_rel_edges = [
-                    (target, key, attr)
-                    for n in predecessors_by_is_a
-                    for _, target, key, attr in self._graph.out_edges(
-                        n, data=True, keys=True
-                    )
-                    if key not in ["_is_a_", "_relates_to_"]
-                ]
-                for source, key, attr in in_verb_rel_edges:
-                    if self._graph.has_edge(source, node, key=key):
-                        continue
-                    self._add_edge(
-                        source,
-                        node,
-                        attr["label"],
-                        attr["lemmas"],
-                        attr["deprel"],
-                        attr["description"],
-                        weight=attr["weight"],
-                        feat_type=attr["feat_type"],
-                    )
-                    modified = True
-                for target, key, attr in out_verb_rel_edges:
-                    if self._graph.has_edge(node, target, key=key):
-                        continue
-                    self._add_edge(
-                        node,
-                        target,
-                        attr["label"],
-                        attr["lemmas"],
-                        attr["deprel"],
-                        attr["description"],
-                        weight=attr["weight"],
-                        feat_type=attr["feat_type"],
-                    )
-                    modified = True
 
     def _find_target_merge_candidates(self, source, key):
         return {
