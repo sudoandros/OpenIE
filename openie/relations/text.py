@@ -650,42 +650,30 @@ class RelGraph:
         xml_tree.write(path, encoding="utf-8")
 
     def _find_nodes_to_remove(self, n_nodes_to_leave):
-        all_nodes = sorted(
-            set(self._graph.nodes),
-            key=lambda node: self._graph.nodes[node]["weight"],
-            reverse=True,
+        # include only nodes with verb relations
+        nodes_to_leave = set()
+        for node in self._graph.nodes:
+            if any(
+                key not in ["_is_a_", "_relates_to_"]  # is a verb relation
+                for _, _, key in chain(
+                    self._graph.in_edges(node, keys=True),
+                    self._graph.out_edges(node, keys=True),
+                )
+            ):
+                nodes_to_leave.add(node)
+        if len(nodes_to_leave) <= n_nodes_to_leave:
+            return set(self._graph.nodes) - nodes_to_leave
+
+        # include only the most weighted nodes
+        nodes_to_leave = set(
+            sorted(
+                nodes_to_leave,
+                key=lambda node: self._graph.nodes[node]["weight"],
+                reverse=True,
+            )[:n_nodes_to_leave]
         )
-        nodes_to_leave = set(all_nodes[: min(n_nodes_to_leave, len(all_nodes))])
-        next_node_index = min(n_nodes_to_leave, len(all_nodes)) + 1
 
-        # exclude nodes connected by additional relations only
-        while True:
-            for node in nodes_to_leave:
-                if all(
-                    [
-                        self._graph.edges[source, target, key]["label"]
-                        in ["_is_a_", "_relates_to_"]
-                        for source, target, key in self._graph.out_edges(
-                            node, keys=True
-                        )
-                        if target in nodes_to_leave
-                    ]
-                    + [
-                        self._graph.edges[source, target, key]["label"]
-                        in ["_is_a_", "_relates_to_"]
-                        for source, target, key in self._graph.in_edges(node, keys=True)
-                        if source in nodes_to_leave
-                    ]
-                ):
-                    nodes_to_leave.discard(node)
-                    if next_node_index < len(all_nodes):
-                        nodes_to_leave.add(all_nodes[next_node_index])
-                        next_node_index += 1
-                    break
-            else:
-                break
-
-        return set(all_nodes) - set(nodes_to_leave)
+        return set(self._graph.nodes) - nodes_to_leave
 
     def _perform_filtering(self, nodes_to_remove):
         nodes_to_remove = set(nodes_to_remove)
