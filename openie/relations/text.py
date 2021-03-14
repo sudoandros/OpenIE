@@ -672,34 +672,26 @@ class RelGraph:
 
     def _perform_filtering(self, nodes_to_remove):
         nodes_to_remove = set(nodes_to_remove)
-        while True:
-            for node in nodes_to_remove:
-                in_edges = list(self._graph.in_edges(node, keys=True))
-                out_edges = list(self._graph.out_edges(node, keys=True))
-                for pred, _, key_pred in in_edges:
-                    for _, succ, key_succ in out_edges:
-                        if (
-                            self._graph[node][succ][key_succ]["label"]
-                            != self._graph[pred][node][key_pred]["label"]
-                        ):
-                            continue
-                        # FIXME wrong attrs in the new edge?
-                        # to implement A->B->C  ==>  A->C
-                        self._add_edge(
-                            pred,
-                            succ,
-                            self._graph[node][succ][key_succ]["label"],
-                            self._graph[node][succ][key_succ]["lemmas"],
-                            self._graph[node][succ][key_succ]["deprel"],
-                            self._graph[node][succ][key_succ]["description"],
-                            weight=self._graph[node][succ][key_succ]["weight"],
-                            feat_type=self._graph[node][succ][key_succ]["feat_type"],
-                        )
-                self._graph.remove_node(node)
-                nodes_to_remove.discard(node)
-                break
-            else:
-                break
+        for node in nodes_to_remove:
+            in_edges = list(self._graph.in_edges(node, keys=True))
+            out_edges = list(self._graph.out_edges(node, keys=True))
+            # if removing B: A->B->C  ==>  A->C
+            for pred, _, key_pred in in_edges:
+                for _, succ, key_succ in out_edges:
+                    if key_pred != key_succ:
+                        continue
+                    # FIXME wrong attrs in the new edge?
+                    self._add_edge(
+                        pred,
+                        succ,
+                        self._graph[node][succ][key_succ]["label"],
+                        self._graph[node][succ][key_succ]["lemmas"],
+                        self._graph[node][succ][key_succ]["deprel"],
+                        self._graph[node][succ][key_succ]["description"],
+                        weight=self._graph[node][succ][key_succ]["weight"],
+                        feat_type=self._graph[node][succ][key_succ]["feat_type"],
+                    )
+            self._graph.remove_node(node)
 
     def _transform(self):
         # transform relations from edges to nodes with specific node_type and color
