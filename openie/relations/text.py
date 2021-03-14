@@ -207,38 +207,23 @@ class RelGraph:
         return key
 
     def _inherit_relation(self, source, target, key):
-        if key == "_is_a_":
-            # it's a "is a" relation
+        if key == "_is_a_":  # it's a "is a" relation
             # inherit all verb relations from up the source to the target
-            edges = list(self._graph.in_edges(source, keys=True, data=True)) + list(
-                self._graph.out_edges(source, keys=True, data=True),
+            edges = list(self._graph.in_edges(source, keys=True)) + list(
+                self._graph.out_edges(source, keys=True),
             )
-            for s, t, key, attr in edges:
+            for s, t, key in edges:
                 if key in ["_is_a_", "_relates_to_"]:
                     continue
-                new_source, new_target = None, None
-                if s == source:  # is "out" edge
-                    new_source, new_target = target, t
-                elif t == source:  # is "in" edge
-                    new_source, new_target = s, target
-                self._add_edge(
-                    new_source,
-                    new_target,
-                    attr["label"],
-                    attr["lemmas"],
-                    attr["deprel"],
-                    attr["description"],
-                    weight=attr["weight"],
-                    feat_type=attr["feat_type"],
-                )
-        elif key != "_relates_to_":
-            # it's a verb relation
-            # inherit this relation down the "is a" relations for both the
-            # source and the target
-            successors = list(self._graph.successors(source))
+                self._inherit_relation(s, t, key)
+        elif key != "_relates_to_":  # it's a verb relation
+            # inherit this relation down the "is a" relations for the source
+            successors = [
+                node
+                for node in self._graph.successors(source)
+                if self._graph.has_edge(source, node, key="_is_a_")
+            ]
             for node in successors:
-                if not self._graph.has_edge(source, node, key="_is_a_"):
-                    continue
                 self._add_edge(
                     node,
                     target,
@@ -249,10 +234,14 @@ class RelGraph:
                     weight=self._graph[source][target][key]["weight"],
                     feat_type=self._graph[source][target][key]["feat_type"],
                 )
-            successors = list(self._graph.successors(target))
+
+            # inherit this relation down the "is a" relations for the target
+            successors = [
+                node
+                for node in self._graph.successors(target)
+                if self._graph.has_edge(target, node, key="_is_a_")
+            ]
             for node in successors:
-                if not self._graph.has_edge(target, node, key="_is_a_"):
-                    continue
                 self._add_edge(
                     source,
                     node,
