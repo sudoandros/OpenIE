@@ -16,6 +16,7 @@ from sklearn_extra.cluster import KMedoids
 
 MIN_CLUSTER_SIZE = 50
 NODE_DISTANCE_THRESHOLD = 0.3
+SAME_NAME_NODE_DISTANCE_THRESHOLD = 0.5
 
 
 class RelGraph:
@@ -310,7 +311,7 @@ class RelGraph:
             )
         }
 
-    def _filter_node_merge_candidates(self, nodes: Set[str], distance_threshold: float):
+    def _filter_node_merge_candidates(self, nodes: Set[str]):
         res = nodes.copy()
         for node1 in nodes:
             for node2 in nodes:
@@ -323,14 +324,11 @@ class RelGraph:
                 ):
                     res.discard(node1)
                     res.discard(node2)
-
-        if len(res) < 2:
-            return res
-
-        res = self._find_nodes_inside_radius(res, distance_threshold)
         return res
 
-    def _find_nodes_inside_radius(self, nodes: Iterable[str], radius: float):
+    def _find_nodes_inside_radius(
+        self, nodes: Iterable[str], radius: float
+    ) -> Set[str]:
         nodes = sorted(
             nodes,
             key=lambda node: (self._graph.nodes[node]["weight"], node),
@@ -346,7 +344,10 @@ class RelGraph:
                     group.add(node)
             if len(group) > 1:
                 return group
-        return {nodes[0]}
+        if len(nodes) > 0:
+            return {nodes[0]}
+        else:
+            return set()
 
     def _nodes_distance(self, node1, node2):
         vector1: np.ndarray = self._graph.nodes[node1]["vector"]
@@ -367,7 +368,8 @@ class RelGraph:
         if len(res) < 2:
             return res
 
-        res = self._filter_node_merge_candidates(res, NODE_DISTANCE_THRESHOLD)
+        res = self._filter_node_merge_candidates(res)
+        res = self._find_nodes_inside_radius(res, NODE_DISTANCE_THRESHOLD)
         return res
 
     def _find_edges_to_merge(self, source, target):
@@ -464,6 +466,7 @@ class RelGraph:
         )
 
     def _find_same_name_sources_to_merge_weak_rule(self):
+        # TODO merge with _find_same_name_targets_to_merge_weak_rule into a single function
         labels_edges_dict = {}
         for s, t, k in self._graph.edges:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
@@ -482,7 +485,10 @@ class RelGraph:
             if len(edges) < 2:
                 continue
             targets = {t for _, t, _ in edges}
-            targets = self._filter_node_merge_candidates(targets, 0.7)
+            targets = self._filter_node_merge_candidates(targets)
+            targets = self._find_nodes_inside_radius(
+                targets, SAME_NAME_NODE_DISTANCE_THRESHOLD
+            )
             sources_to_merge = frozenset(
                 s for s, t, _ in edges if t in targets and s not in seen
             )
@@ -506,7 +512,6 @@ class RelGraph:
         for s, t, k in self._graph.edges:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
                 continue
-            labels = (self._graph[s][t][k]["label"], self._graph.nodes[t]["label"])
             edge_labels = self._graph[s][t][k]["label"].split(" | ")
             target_labels = self._graph.nodes[t]["label"].split(" | ")
             for labels in product(edge_labels, target_labels):
@@ -521,8 +526,9 @@ class RelGraph:
             if len(edges) < 2:
                 continue
             sources = {s for s, _, _ in edges}
-            sources = self._filter_node_merge_candidates(
-                sources, NODE_DISTANCE_THRESHOLD
+            sources = self._filter_node_merge_candidates(sources)
+            sources = self._find_nodes_inside_radius(
+                sources, SAME_NAME_NODE_DISTANCE_THRESHOLD
             )
             targets_to_merge = frozenset(
                 t for s, t, _ in edges if s in sources and t not in seen
