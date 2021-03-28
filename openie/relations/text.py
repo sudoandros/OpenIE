@@ -9,14 +9,16 @@ import networkx as nx
 import networkx.algorithms.components
 import numpy as np
 import openie.syntax
+from numba import njit
 from openie.relations.sentence import SentenceReltuples
-from scipy.spatial import distance
 from sklearn.metrics import silhouette_score
 from sklearn_extra.cluster import KMedoids
+from tqdm import tqdm
 
 MIN_CLUSTER_SIZE = 50
 NODE_DISTANCE_THRESHOLD = 0.3
 SAME_NAME_NODE_DISTANCE_THRESHOLD = 0.5
+SAME_CONTEXT_NODE_DISTANCE_THRESHOLD = 0.05
 
 
 class RelGraph:
@@ -68,17 +70,19 @@ class RelGraph:
 
     def merge_relations(self):
         while True:
-            same_name_nodes_to_merge_sets = set(self._find_same_name_nodes_to_merge())
-            if len(same_name_nodes_to_merge_sets) > 0:
-                for same_name_nodes_to_merge in same_name_nodes_to_merge_sets:
-                    self._merge_nodes(same_name_nodes_to_merge)
+            same_name_nodes_to_merge_sets = self._find_same_name_nodes_to_merge()
+            for same_name_nodes_to_merge in same_name_nodes_to_merge_sets:
+                self._merge_nodes(same_name_nodes_to_merge)
 
             same_name_nodes_to_merge_sets = (
                 self._find_same_name_nodes_to_merge_weak_rule()
             )
-            if len(same_name_nodes_to_merge_sets) > 0:
-                for same_name_nodes_to_merge in same_name_nodes_to_merge_sets:
-                    self._merge_nodes(same_name_nodes_to_merge)
+            for same_name_nodes_to_merge in same_name_nodes_to_merge_sets:
+                self._merge_nodes(same_name_nodes_to_merge)
+
+            same_context_nodes_to_merge_sets = self._find_same_context_nodes_to_merge()
+            for same_context_nodes_to_merge in same_context_nodes_to_merge_sets:
+                self._merge_nodes(same_context_nodes_to_merge)
 
             nodes_to_merge = []
             edges_to_merge = []
@@ -349,13 +353,14 @@ class RelGraph:
         else:
             return set()
 
-    def _nodes_distance(self, node1, node2):
-        vector1: np.ndarray = self._graph.nodes[node1]["vector"]
-        vector2: np.ndarray = self._graph.nodes[node2]["vector"]
-        if not vector1.any() or not vector2.any():
-            return float("inf")
+    def _nodes_distance(self, node1: str, node2: str, use_context=False):
+        if use_context:
+            attr_key = "context_vector"
         else:
-            return float(distance.cosine(vector1, vector2))
+            attr_key = "vector"
+        vector1 = self._graph.nodes[node1][attr_key]
+        vector2 = self._graph.nodes[node2][attr_key]
+        return cosine_distance(vector1, vector2)
 
     def _find_nodes_to_merge(self, source=None, target=None, key=None):
         if source is not None and key is not None:
@@ -548,6 +553,55 @@ class RelGraph:
             seen.update(targets_to_merge)
         return res
 
+    def _find_same_context_nodes_to_merge(self):
+        self._update_context_vectors()
+
+        to_merge_sets = []
+        nodes_list = list(self._graph.nodes)
+        for i, node1 in tqdm(
+            enumerate(nodes_list),
+            total=len(nodes_list),
+            desc="Searching for the same context nodes",
+        ):
+            to_merge = {node1}
+            for node2 in nodes_list[i + 1 :]:
+                in_the_same_cluster = (
+                    self._graph.nodes[node1]["feat_type"]
+                    & self._graph.nodes[node2]["feat_type"]
+                )
+                dist = self._nodes_distance(node1, node2, use_context=True)
+                if in_the_same_cluster or dist > SAME_CONTEXT_NODE_DISTANCE_THRESHOLD:
+                    continue
+                to_merge.add(node2)
+            if len(to_merge) > 1:
+                to_merge_sets.append(to_merge)
+
+        res = set()
+        seen = set()
+        for to_merge in to_merge_sets:
+            to_merge -= seen
+            if len(to_merge) < 2:
+                continue
+            logging.info(
+                "Found same context nodes to merge:\n"
+                + "\n".join(self._graph.nodes[node]["label"] for node in to_merge)
+            )
+            res.add(frozenset(to_merge))
+            seen |= to_merge
+        return res
+
+    # TODO do it when adding a node?
+    def _update_context_vectors(self):
+        for node in self._graph.nodes:
+            vectors = [
+                self._graph.nodes[node]["vector"]
+                for node in chain(
+                    self._graph.predecessors(node), self._graph.successors(node)
+                )  # all neighbors
+            ] + [self._graph.nodes[node]["vector"]]
+            context_vector = sum(vectors) / len(vectors)
+            self._graph.nodes[node]["context_vector"] = context_vector
+
     def _merge_nodes(self, nodes):
         def new_set_attr_value(attr_key):
             res = set()
@@ -634,6 +688,10 @@ class RelGraph:
             if self._graph.nodes[node].get("vector") is not None:
                 self._graph.nodes[node]["vector"] = str(
                     self._graph.nodes[node]["vector"].tolist()
+                )
+            if self._graph.nodes[node].get("context_vector") is not None:
+                self._graph.nodes[node]["context_vector"] = str(
+                    self._graph.nodes[node]["context_vector"].tolist()
                 )
             self._graph.nodes[node]["description"] = " | ".join(
                 self._graph.nodes[node]["description"]
@@ -793,6 +851,17 @@ class TextReltuples:
             ]
         self._graph.merge_relations()
         self._graph.filter_nodes(entities_limit)
+        logging.info(
+            "Relation tuples have been extracted from texts. "
+            "The resulting graph consists of\n"
+            f"{self._graph.nodes_number} nodes\n"
+            f"{self._graph.edges_number} edges\n"
+            "{} connected components".format(
+                networkx.algorithms.components.number_weakly_connected_components(
+                    self._graph._graph
+                )
+            )
+        )
 
     @property
     def graph(self):
@@ -839,3 +908,14 @@ def _to_set_if_not_already(attr_key):
     else:
         return set(attr_key)
 
+
+@njit()
+def cosine_distance(u: np.ndarray, v: np.ndarray) -> float:
+    udotv = np.dot(u, v)
+    u_norm = np.linalg.norm(u)
+    v_norm = np.linalg.norm(v)
+    if (u_norm == 0) or (v_norm == 0):
+        ratio = 0
+    else:
+        ratio = udotv / (u_norm * v_norm)
+    return 1 - ratio
