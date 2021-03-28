@@ -556,30 +556,25 @@ class RelGraph:
     def _find_same_context_nodes_to_merge(self):
         self._update_context_vectors()
 
-        to_merge_sets = []
         nodes_list = list(self._graph.nodes)
-        for i, node1 in tqdm(
-            enumerate(nodes_list),
-            total=len(nodes_list),
-            desc="Searching for the same context nodes",
-        ):
-            to_merge = {node1}
-            for node2 in nodes_list[i + 1 :]:
-                in_the_same_cluster = (
+        to_merge_sets = {node: {node} for node in nodes_list}
+        for (i, node1), (j, node2) in product(enumerate(nodes_list), repeat=2):
+            if (
+                i >= j
+                or (
                     self._graph.nodes[node1]["feat_type"]
                     & self._graph.nodes[node2]["feat_type"]
                 )
-                dist = self._nodes_distance(node1, node2, use_context=True)
-                if in_the_same_cluster or dist > SAME_CONTEXT_NODE_DISTANCE_THRESHOLD:
-                    continue
-                to_merge.add(node2)
-            if len(to_merge) > 1:
-                to_merge_sets.append(to_merge)
+                or self._nodes_distance(node1, node2, use_context=True)
+                > SAME_CONTEXT_NODE_DISTANCE_THRESHOLD
+            ):
+                continue
+            to_merge_sets[node1].add(node2)
 
         res = set()
         seen = set()
-        for to_merge in to_merge_sets:
-            to_merge -= seen
+        for node in to_merge_sets:
+            to_merge = to_merge_sets[node] - seen
             if len(to_merge) < 2:
                 continue
             logging.info(
