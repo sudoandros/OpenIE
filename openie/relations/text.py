@@ -177,9 +177,11 @@ class RelGraph:
             # it's a new edge
             color = {"b": 0, "g": 0, "r": 0}
             if label == "_is_a_":
-                color = {"b": 255, "g": 0, "r": 0}
+                color = {"b": 160, "g": 160, "r": 255}
             elif label == "_relates_to_":
-                color = {"b": 0, "g": 255, "r": 0}
+                color = {"b": 160, "g": 255, "r": 160}
+            else:
+                color = {"b": 255, "g": 0, "r": 0}
             self._graph.add_edge(
                 source,
                 target,
@@ -695,7 +697,7 @@ class RelGraph:
             self._graph.remove_node(node)
 
     def _transform(self):
-        # transform relations from edges to nodes with specific node_type and color
+        # transform relations from edges to nodes with specific node_type
         for node in self._graph:
             self._graph.nodes[node]["node_type"] = "argument"
         for source, target, key, attr in list(self._graph.edges(data=True, keys=True)):
@@ -703,12 +705,6 @@ class RelGraph:
                 self._graph.edges[source, target, key]["label"], source, target
             )
             new_attr = deepcopy(attr)
-            if self._graph.edges[source, target, key]["label"] == "_is_a_":
-                new_attr["viz"] = {"color": {"b": 160, "g": 160, "r": 255}}
-            elif self._graph.edges[source, target, key]["label"] == "_relates_to_":
-                new_attr["viz"] = {"color": {"b": 160, "g": 255, "r": 160}}
-            else:
-                new_attr["viz"] = {"color": {"b": 255, "g": 0, "r": 0}}
             new_attr["node_type"] = "relation"
             new_attr["weight"] = min(
                 self._graph.nodes[source]["weight"], self._graph.nodes[target]["weight"]
