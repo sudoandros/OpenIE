@@ -13,12 +13,10 @@ from numba import njit
 from openie.relations.sentence import SentenceReltuples
 from sklearn.metrics import silhouette_score
 from sklearn_extra.cluster import KMedoids
-from tqdm import tqdm
 
 MIN_CLUSTER_SIZE = 50
 NODE_DISTANCE_THRESHOLD = 0.3
 SAME_NAME_NODE_DISTANCE_THRESHOLD = 0.5
-SAME_CONTEXT_NODE_DISTANCE_THRESHOLD = 0.05
 
 
 class RelGraph:
@@ -79,10 +77,6 @@ class RelGraph:
             )
             for same_name_nodes_to_merge in same_name_nodes_to_merge_sets:
                 self._merge_nodes(same_name_nodes_to_merge)
-
-            same_context_nodes_to_merge_sets = self._find_same_context_nodes_to_merge()
-            for same_context_nodes_to_merge in same_context_nodes_to_merge_sets:
-                self._merge_nodes(same_context_nodes_to_merge)
 
             nodes_to_merge = []
             edges_to_merge = []
@@ -353,13 +347,9 @@ class RelGraph:
         else:
             return set()
 
-    def _nodes_distance(self, node1: str, node2: str, use_context=False):
-        if use_context:
-            attr_key = "context_vector"
-        else:
-            attr_key = "vector"
-        vector1 = self._graph.nodes[node1][attr_key]
-        vector2 = self._graph.nodes[node2][attr_key]
+    def _nodes_distance(self, node1: str, node2: str):
+        vector1 = self._graph.nodes[node1]["vector"]
+        vector2 = self._graph.nodes[node2]["vector"]
         return cosine_distance(vector1, vector2)
 
     def _find_nodes_to_merge(self, source=None, target=None, key=None):
@@ -553,50 +543,6 @@ class RelGraph:
             seen.update(targets_to_merge)
         return res
 
-    def _find_same_context_nodes_to_merge(self):
-        self._update_context_vectors()
-
-        nodes_list = list(self._graph.nodes)
-        to_merge_sets = {node: {node} for node in nodes_list}
-        for (i, node1), (j, node2) in product(enumerate(nodes_list), repeat=2):
-            if (
-                i >= j
-                or (
-                    self._graph.nodes[node1]["feat_type"]
-                    & self._graph.nodes[node2]["feat_type"]
-                )
-                or self._nodes_distance(node1, node2, use_context=True)
-                > SAME_CONTEXT_NODE_DISTANCE_THRESHOLD
-            ):
-                continue
-            to_merge_sets[node1].add(node2)
-
-        res = set()
-        seen = set()
-        for node in to_merge_sets:
-            to_merge = to_merge_sets[node] - seen
-            if len(to_merge) < 2:
-                continue
-            logging.info(
-                "Found same context nodes to merge:\n"
-                + "\n".join(self._graph.nodes[node]["label"] for node in to_merge)
-            )
-            res.add(frozenset(to_merge))
-            seen |= to_merge
-        return res
-
-    # TODO do it when adding a node?
-    def _update_context_vectors(self):
-        for node in self._graph.nodes:
-            vectors = [
-                self._graph.nodes[node]["vector"]
-                for node in chain(
-                    self._graph.predecessors(node), self._graph.successors(node)
-                )  # all neighbors
-            ] + [self._graph.nodes[node]["vector"]]
-            context_vector = sum(vectors) / len(vectors)
-            self._graph.nodes[node]["context_vector"] = context_vector
-
     def _merge_nodes(self, nodes):
         def new_set_attr_value(attr_key):
             res = set()
@@ -683,10 +629,6 @@ class RelGraph:
             if self._graph.nodes[node].get("vector") is not None:
                 self._graph.nodes[node]["vector"] = str(
                     self._graph.nodes[node]["vector"].tolist()
-                )
-            if self._graph.nodes[node].get("context_vector") is not None:
-                self._graph.nodes[node]["context_vector"] = str(
-                    self._graph.nodes[node]["context_vector"].tolist()
                 )
             self._graph.nodes[node]["description"] = " | ".join(
                 self._graph.nodes[node]["description"]
