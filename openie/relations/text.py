@@ -572,20 +572,9 @@ class RelGraph:
             self._graph.remove_edge(source, target, key=key)
 
     def save(self, path):
-        self._transform()
-        for node in self._graph:
-            if self._graph.nodes[node].get("vector") is not None:
-                self._graph.nodes[node]["vector"] = str(
-                    self._graph.nodes[node]["vector"].tolist()
-                )
-            self._graph.nodes[node]["description"] = " | ".join(
-                self._graph.nodes[node]["description"]
-            )
-            self._graph.nodes[node]["feat_type"] = " | ".join(
-                str(elem) for elem in self._graph.nodes[node]["feat_type"]
-            )
+        graph = self._transform_graph()
         stream_buffer = io.BytesIO()
-        nx.write_gexf(self._graph, stream_buffer, encoding="utf-8", version="1.1draft")
+        nx.write_gexf(graph, stream_buffer, encoding="utf-8", version="1.1draft")
         xml_string = stream_buffer.getvalue().decode("utf-8")
         root_element = ET.fromstring(xml_string)
         self._fix_gexf(root_element)
@@ -642,23 +631,34 @@ class RelGraph:
                     )
             self._graph.remove_node(node)
 
-    def _transform(self):
+    def _transform_graph(self):
+        res = deepcopy(self._graph)
         # transform relations from edges to nodes with specific node_type
-        for node in self._graph:
-            self._graph.nodes[node]["node_type"] = "argument"
-        for source, target, key, attr in list(self._graph.edges(data=True, keys=True)):
+        for node in res:
+            res.nodes[node]["node_type"] = "argument"
+        for source, target, key, attr in list(res.edges(data=True, keys=True)):
             node = "{}({}; {})".format(
-                self._graph.edges[source, target, key]["label"], source, target
+                res.edges[source, target, key]["label"], source, target
             )
             new_attr = deepcopy(attr)
             new_attr["node_type"] = "relation"
             new_attr["weight"] = min(
-                self._graph.nodes[source]["weight"], self._graph.nodes[target]["weight"]
+                res.nodes[source]["weight"], res.nodes[target]["weight"]
             )
-            self._graph.add_node(node, **new_attr)
-            self._graph.add_edge(source, node)
-            self._graph.add_edge(node, target)
-            self._graph.remove_edge(source, target, key=key)
+            res.add_node(node, **new_attr)
+            res.add_edge(source, node)
+            res.add_edge(node, target)
+            res.remove_edge(source, target, key=key)
+
+        # convert non-serializable attributes to strings
+        for node in res:
+            if res.nodes[node].get("vector") is not None:
+                res.nodes[node]["vector"] = str(res.nodes[node]["vector"].tolist())
+            res.nodes[node]["description"] = " | ".join(res.nodes[node]["description"])
+            res.nodes[node]["feat_type"] = " | ".join(
+                str(elem) for elem in res.nodes[node]["feat_type"]
+            )
+        return res
 
     @staticmethod
     def _fix_gexf(root_element):
