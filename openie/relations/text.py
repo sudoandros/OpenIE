@@ -3,7 +3,7 @@ import logging
 import xml.etree.ElementTree as ET
 from copy import deepcopy
 from itertools import chain, groupby, product
-from typing import Iterable, List, Sequence, Set
+from typing import Dict, FrozenSet, Iterable, List, Sequence, Set, Tuple
 
 import networkx as nx
 import networkx.algorithms.components
@@ -72,17 +72,13 @@ class RelGraph:
             for same_name_nodes_to_merge in same_name_nodes_to_merge_sets:
                 self._merge_nodes(same_name_nodes_to_merge)
 
-            same_name_nodes_to_merge_sets = (
-                self._find_same_name_nodes_to_merge_weak_rule()
-            )
-            for same_name_nodes_to_merge in same_name_nodes_to_merge_sets:
-                self._merge_nodes(same_name_nodes_to_merge)
-
             nodes_to_merge = []
             edges_to_merge = []
 
             for source, target, key in self._graph.edges:
-                targets_to_merge = self._find_nodes_to_merge(source=source, key=key)
+                targets_to_merge = self._find_same_neighbor_nodes_to_merge(
+                    source=source, key=key
+                )
                 if len(targets_to_merge) > 1:
                     logging.info(
                         (
@@ -106,7 +102,9 @@ class RelGraph:
                     nodes_to_merge = targets_to_merge
                     break
 
-                sources_to_merge = self._find_nodes_to_merge(target=target, key=key)
+                sources_to_merge = self._find_same_neighbor_nodes_to_merge(
+                    target=target, key=key
+                )
                 if len(sources_to_merge) > 1:
                     logging.info(
                         (
@@ -285,7 +283,7 @@ class RelGraph:
             self._graph.nodes[node]["weight"] += weight
         return node
 
-    def _find_target_merge_candidates(self, source, key):
+    def _find_neighbor_targets_to_merge(self, source, key):
         return {
             target
             for target in self._graph.successors(source)
@@ -298,7 +296,7 @@ class RelGraph:
             )
         }
 
-    def _find_source_merge_candidates(self, target, key):
+    def _find_neighbor_sources_to_merge(self, target, key):
         return {
             source
             for source in self._graph.predecessors(target)
@@ -313,21 +311,20 @@ class RelGraph:
 
     def _filter_node_merge_candidates(self, nodes: Set[str]):
         res = nodes.copy()
-        for node1 in nodes:
-            for node2 in nodes:
-                if node1 != node2 and (
-                    self._graph.has_edge(node1, node2)
-                    or (
-                        self._graph.nodes[node1]["description"]
-                        & self._graph.nodes[node2]["description"]
-                    )
-                ):
-                    res.discard(node1)
-                    res.discard(node2)
+        for node1, node2 in product(nodes, repeat=2):
+            if node1 != node2 and (
+                self._graph.has_edge(node1, node2)
+                or (
+                    self._graph.nodes[node1]["description"]
+                    & self._graph.nodes[node2]["description"]
+                )
+            ):
+                res.discard(node1)
+                res.discard(node2)
         return res
 
-    def _find_nodes_inside_radius(
-        self, nodes: Iterable[str], radius: float
+    def _find_close_nodes(
+        self, nodes: Iterable[str], distance_threshold: float
     ) -> Set[str]:
         nodes = sorted(
             nodes,
@@ -335,13 +332,13 @@ class RelGraph:
             reverse=True,
         )
         for central_node in nodes:
-            group = {central_node}
-            for node in nodes:
-                if (
-                    self._nodes_distance(central_node, node) <= radius
-                    and node != central_node
-                ):
-                    group.add(node)
+            group = {
+                node
+                for node in nodes
+                if self._nodes_distance(central_node, node) <= distance_threshold
+                or set(self._graph.nodes[central_node]["label"].split(" | "))
+                & set(self._graph.nodes[node]["label"].split(" | "))
+            }  # same labels nodes are considered close too
             if len(group) > 1:
                 return group
         if len(nodes) > 0:
@@ -354,11 +351,11 @@ class RelGraph:
         vector2 = self._graph.nodes[node2]["vector"]
         return cosine_distance(vector1, vector2)
 
-    def _find_nodes_to_merge(self, source=None, target=None, key=None):
+    def _find_same_neighbor_nodes_to_merge(self, source=None, target=None, key=None):
         if source is not None and key is not None:
-            res = self._find_target_merge_candidates(source, key)
+            res = self._find_neighbor_targets_to_merge(source, key)
         elif target is not None and key is not None:
-            res = self._find_source_merge_candidates(target, key)
+            res = self._find_neighbor_sources_to_merge(target, key)
         else:
             raise ValueError("Wrong set of specified arguments")
 
@@ -366,7 +363,7 @@ class RelGraph:
             return res
 
         res = self._filter_node_merge_candidates(res)
-        res = self._find_nodes_inside_radius(res, NODE_DISTANCE_THRESHOLD)
+        res = self._find_close_nodes(res, NODE_DISTANCE_THRESHOLD)
         return res
 
     def _find_edges_to_merge(self, source, target):
@@ -415,84 +412,43 @@ class RelGraph:
         return edges
 
     def _find_same_name_nodes_to_merge(self):
-        labels_edges_dict = {}
-        for s, t, k in self._graph.edges:
-            if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
-                continue
-            source_labels = self._graph.nodes[s]["label"].split(" | ")
-            edge_labels = self._graph[s][t][k]["label"].split(" | ")
-            target_labels = self._graph.nodes[t]["label"].split(" | ")
-            for labels in product(source_labels, edge_labels, target_labels):
-                if labels not in labels_edges_dict:
-                    labels_edges_dict[labels] = [(s, t, k)]
-                else:
-                    labels_edges_dict[labels].append((s, t, k))
-
-        res = set()
-        seen = set()
-        for edges in labels_edges_dict.values():
-            if len(edges) < 2:
-                continue
-            sources_to_merge = frozenset(s for s, _, _ in edges if s not in seen)
-            if len(sources_to_merge) > 1:
-                res.add(sources_to_merge)
-                logging.info(
-                    f"Found {len(sources_to_merge)} same name sources to merge:\n"
-                    + "\n".join(
-                        self._graph.nodes[node]["label"] for node in sources_to_merge
-                    )
-                )
-                seen.update(sources_to_merge)
-            targets_to_merge = frozenset(t for _, t, _ in edges if t not in seen)
-            if len(targets_to_merge) > 1:
-                logging.info(
-                    f"Found {len(targets_to_merge)} same name targets to merge:\n"
-                    + "\n".join(
-                        self._graph.nodes[node]["label"] for node in targets_to_merge
-                    )
-                )
-                res.add(targets_to_merge)
-                seen.update(targets_to_merge)
+        res: Set[FrozenSet[str]] = set()
+        seen: Set[str] = set()
+        for nodes_to_merge in (
+            self._find_same_name_sources_to_merge()
+            | self._find_same_name_targets_to_merge()
+        ):
+            new_nodes_to_merge = frozenset(
+                node for node in nodes_to_merge if node not in seen
+            )
+            if len(new_nodes_to_merge) > 1:
+                res.add(new_nodes_to_merge)
+                seen.update(new_nodes_to_merge)
         return res
 
-    def _find_same_name_nodes_to_merge_weak_rule(self):
-        # TODO merge with `_find_same_name_nodes_to_merge` into a single function
-        return (
-            self._find_same_name_sources_to_merge_weak_rule()
-            | self._find_same_name_targets_to_merge_weak_rule()
-        )
-
-    def _find_same_name_sources_to_merge_weak_rule(self):
-        # TODO merge with _find_same_name_targets_to_merge_weak_rule into a single function
-        labels_edges_dict = {}
+    def _find_same_name_sources_to_merge(self):
+        # TODO merge with _find_same_name_targets_to_merged into a single function?
+        labels_edges_dict: Dict[Tuple[str, str], Set[Tuple[str, str, str]]] = {}
         for s, t, k in self._graph.edges:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
                 continue
             source_labels = self._graph.nodes[s]["label"].split(" | ")
             edge_labels = self._graph[s][t][k]["label"].split(" | ")
             for labels in product(source_labels, edge_labels):
-                if labels not in labels_edges_dict:
-                    labels_edges_dict[labels] = {(s, t, k)}
-                else:
-                    labels_edges_dict[labels].add((s, t, k))
+                labels_edges_dict.setdefault(labels, set()).add((s, t, k))
 
-        res = set()
-        seen = set()
+        res: Set[FrozenSet[str]] = set()
         for edges in labels_edges_dict.values():
             if len(edges) < 2:
                 continue
             targets = {t for _, t, _ in edges}
             targets = self._filter_node_merge_candidates(targets)
-            targets = self._find_nodes_inside_radius(
-                targets, SAME_NAME_NODE_DISTANCE_THRESHOLD
-            )
-            sources_to_merge = frozenset(
-                s for s, t, _ in edges if t in targets and s not in seen
-            )
+            targets = self._find_close_nodes(targets, SAME_NAME_NODE_DISTANCE_THRESHOLD)
+            sources_to_merge = frozenset(s for s, t, _ in edges if t in targets)
             if len(sources_to_merge) < 2:
                 continue
             logging.info(
-                "Found same name sources to merge (weak rule):\n"
+                "Found same name sources to merge:\n"
                 + "\n".join(
                     self._graph.nodes[node]["label"] for node in sources_to_merge
                 )
@@ -501,39 +457,30 @@ class RelGraph:
                 + "\n".join(self._graph.nodes[node]["label"] for node in targets)
             )
             res.add(sources_to_merge)
-            seen.update(sources_to_merge)
         return res
 
-    def _find_same_name_targets_to_merge_weak_rule(self):
-        labels_edges_dict = {}
+    def _find_same_name_targets_to_merge(self):
+        labels_edges_dict: Dict[Tuple[str, str], Set[Tuple[str, str, str]]] = {}
         for s, t, k in self._graph.edges:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
                 continue
             edge_labels = self._graph[s][t][k]["label"].split(" | ")
             target_labels = self._graph.nodes[t]["label"].split(" | ")
             for labels in product(edge_labels, target_labels):
-                if labels not in labels_edges_dict:
-                    labels_edges_dict[labels] = {(s, t, k)}
-                else:
-                    labels_edges_dict[labels].add((s, t, k))
+                labels_edges_dict.setdefault(labels, set()).add((s, t, k))
 
-        res = set()
-        seen = set()
+        res: Set[FrozenSet[str]] = set()
         for edges in labels_edges_dict.values():
             if len(edges) < 2:
                 continue
             sources = {s for s, _, _ in edges}
             sources = self._filter_node_merge_candidates(sources)
-            sources = self._find_nodes_inside_radius(
-                sources, SAME_NAME_NODE_DISTANCE_THRESHOLD
-            )
-            targets_to_merge = frozenset(
-                t for s, t, _ in edges if s in sources and t not in seen
-            )
+            sources = self._find_close_nodes(sources, SAME_NAME_NODE_DISTANCE_THRESHOLD)
+            targets_to_merge = frozenset(t for s, t, _ in edges if s in sources)
             if len(targets_to_merge) < 2:
                 continue
             logging.info(
-                "Found same name sources to merge (weak rule):\n"
+                "Found same name sources to merge:\n"
                 + "\n".join(
                     self._graph.nodes[node]["label"] for node in targets_to_merge
                 )
@@ -542,7 +489,6 @@ class RelGraph:
                 + "\n".join(self._graph.nodes[node]["label"] for node in sources)
             )
             res.add(targets_to_merge)
-            seen.update(targets_to_merge)
         return res
 
     def _merge_nodes(self, nodes):
