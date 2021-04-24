@@ -104,7 +104,7 @@ class RelGraph:
                                 "label"
                             ],
                             values_to_merge="\n".join(
-                                self._graph.nodes[node]["label"]
+                                str(self._graph.nodes[node]["label"])
                                 for node in targets_to_merge
                             ),
                         )
@@ -130,7 +130,7 @@ class RelGraph:
                                 "label"
                             ],
                             values_to_merge="\n".join(
-                                self._graph.nodes[node]["label"]
+                                str(self._graph.nodes[node]["label"])
                                 for node in sources_to_merge
                             ),
                         )
@@ -274,14 +274,15 @@ class RelGraph:
         self,
         lemmas: str,
         description: Union[str, Set[str]],
-        label: str,
+        label: Union[str, Set[str]],
         weight: int = 1,
         vector: Optional[np.ndarray] = None,
         feat_type: Union[int, Set[int]] = 0,
     ):
         description = _to_set_if_not_already(description)
         feat_type = _to_set_if_not_already(feat_type)
-        node = f"{lemmas} + {str(feat_type)}"
+        label = _to_set_if_not_already(label)
+        node = f"{lemmas} + {feat_type}"
         if node not in self._graph:
             self._graph.add_node(
                 node,
@@ -294,9 +295,7 @@ class RelGraph:
             )
         else:
             # this node already exists
-            self._graph.nodes[node]["label"] = " | ".join(
-                set(self._graph.nodes[node]["label"].split(" | ") + label.split(" | "))
-            )
+            self._graph.nodes[node]["label"] = label | self._graph.nodes[node]["label"]
             self._graph.nodes[node]["description"] = (
                 description | self._graph.nodes[node]["description"]
             )
@@ -362,8 +361,8 @@ class RelGraph:
                 node
                 for node in nodes
                 if self._nodes_distance(central_node, node) <= distance_threshold
-                or set(self._graph.nodes[central_node]["label"].split(" | "))
-                & set(self._graph.nodes[node]["label"].split(" | "))
+                or self._graph.nodes[central_node]["label"]
+                & self._graph.nodes[node]["label"]
             }  # same labels nodes are considered close too
             if len(group) > 1:
                 return group
@@ -458,8 +457,8 @@ class RelGraph:
         for s, t, k in self._graph.edges:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
                 continue
-            source_labels = self._graph.nodes[s]["label"].split(" | ")
-            edge_labels = self._graph[s][t][k]["label"].split(" | ")
+            source_labels = self._graph.nodes[s]["label"]
+            edge_labels = self._graph[s][t][k]["label"]
             for labels in product(source_labels, edge_labels):
                 labels_edges_dict.setdefault(labels, set()).add((s, t, k))
 
@@ -476,11 +475,11 @@ class RelGraph:
             logging.info(
                 "Found same name sources to merge:\n"
                 + "\n".join(
-                    self._graph.nodes[node]["label"] for node in sources_to_merge
+                    str(self._graph.nodes[node]["label"]) for node in sources_to_merge
                 )
                 + "\n"
                 + "because of the next similar targets:\n"
-                + "\n".join(self._graph.nodes[node]["label"] for node in targets)
+                + "\n".join(str(self._graph.nodes[node]["label"]) for node in targets)
             )
             res.add(sources_to_merge)
         return res
@@ -490,8 +489,8 @@ class RelGraph:
         for s, t, k in self._graph.edges:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
                 continue
-            edge_labels = self._graph[s][t][k]["label"].split(" | ")
-            target_labels = self._graph.nodes[t]["label"].split(" | ")
+            edge_labels = self._graph[s][t][k]["label"]
+            target_labels = self._graph.nodes[t]["label"]
             for labels in product(edge_labels, target_labels):
                 labels_edges_dict.setdefault(labels, set()).add((s, t, k))
 
@@ -508,11 +507,11 @@ class RelGraph:
             logging.info(
                 "Found same name sources to merge:\n"
                 + "\n".join(
-                    self._graph.nodes[node]["label"] for node in targets_to_merge
+                    str(self._graph.nodes[node]["label"]) for node in targets_to_merge
                 )
                 + "\n"
                 + "because of the next similar targets:\n"
-                + "\n".join(self._graph.nodes[node]["label"] for node in sources)
+                + "\n".join(str(self._graph.nodes[node]["label"]) for node in sources)
             )
             res.add(targets_to_merge)
         return res
@@ -531,7 +530,7 @@ class RelGraph:
             return " | ".join(res)
 
         new_lemmas = new_str_attr_value("lemmas")
-        new_label = new_str_attr_value("label")
+        new_label = new_set_attr_value("label")
         new_description = new_set_attr_value("description")
         new_feat_type = new_set_attr_value("feat_type")
         new_weight = sum(self._graph.nodes[node]["weight"] for node in nodes)
@@ -680,6 +679,8 @@ class RelGraph:
         for node in res:
             if res.nodes[node].get("vector") is not None:
                 res.nodes[node]["vector"] = str(res.nodes[node]["vector"].tolist())
+            if isinstance(res.nodes[node]["label"], set):
+                res.nodes[node]["label"] = " | ".join(res.nodes[node]["label"])
             res.nodes[node]["description"] = " | ".join(res.nodes[node]["description"])
             res.nodes[node]["feat_type"] = " | ".join(
                 str(elem) for elem in res.nodes[node]["feat_type"]
@@ -807,11 +808,13 @@ class TextReltuples:
         return res_labels.tolist()
 
 
-def _to_set_if_not_already(attr_key):
-    if isinstance(attr_key, (str, int, float)):
-        return {attr_key}
+def _to_set_if_not_already(
+    value: Union[str, int, float, Iterable[str], Iterable[int], Iterable[float]]
+):
+    if isinstance(value, (str, int, float)):
+        return {value}
     else:
-        return set(attr_key)
+        return set(value)
 
 
 @njit()
