@@ -3,7 +3,17 @@ import logging
 import xml.etree.ElementTree as ET
 from copy import deepcopy
 from itertools import chain, groupby, product
-from typing import Dict, FrozenSet, Iterable, List, Sequence, Set, Tuple
+from typing import (
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 import networkx as nx
 import networkx.algorithms.components
@@ -163,12 +173,20 @@ class RelGraph:
         self._perform_filtering(nodes_to_remove)
 
     def _add_edge(
-        self, source, target, label, lemmas, deprel, description, weight=1, feat_type=0
+        self,
+        source: str,
+        target: str,
+        label: str,
+        lemmas: str,
+        deprel: str,
+        description: Union[str, Set[str]],
+        weight: int = 1,
+        feat_type: Union[int, Set[int]] = 0,
     ):
         if label in ["_is_a_", "_relates_to_"]:
             key = label
         else:
-            key = "{} + {}".format(lemmas, deprel)
+            key = f"{lemmas} + {deprel}"
         description = _to_set_if_not_already(description)
         feat_type = _to_set_if_not_already(feat_type)
         if not self._graph.has_edge(source, target, key=key):
@@ -206,15 +224,15 @@ class RelGraph:
         return key
 
     def _inherit_relation(self, source, target, key):
-        if key == "_is_a_":  # it's a "is a" relation
+        if key == "_is_a_":
             # inherit all verb relations from up the source to the target
             edges = list(self._graph.in_edges(source, keys=True)) + list(
                 self._graph.out_edges(source, keys=True),
             )
-            for s, t, key in edges:
-                if key in ["_is_a_", "_relates_to_"]:
+            for s, t, k in edges:
+                if k in ["_is_a_", "_relates_to_"]:
                     continue
-                self._inherit_relation(s, t, key)
+                self._inherit_relation(s, t, k)
         elif key != "_relates_to_":  # it's a verb relation
             # inherit this relation down the "is a" relations for the source
             successors = [
@@ -252,10 +270,18 @@ class RelGraph:
                     feat_type=self._graph[source][target][key]["feat_type"],
                 )
 
-    def _add_node(self, lemmas, description, label, weight=1, vector=None, feat_type=0):
+    def _add_node(
+        self,
+        lemmas: str,
+        description: Union[str, Set[str]],
+        label: str,
+        weight: int = 1,
+        vector: Optional[np.ndarray] = None,
+        feat_type: Union[int, Set[int]] = 0,
+    ):
         description = _to_set_if_not_already(description)
         feat_type = _to_set_if_not_already(feat_type)
-        node = "{} + {}".format(lemmas, str(feat_type))
+        node = f"{lemmas} + {str(feat_type)}"
         if node not in self._graph:
             self._graph.add_node(
                 node,
@@ -637,8 +663,8 @@ class RelGraph:
         for node in res:
             res.nodes[node]["node_type"] = "argument"
         for source, target, key, attr in list(res.edges(data=True, keys=True)):
-            node = "{}({}; {})".format(
-                res.edges[source, target, key]["label"], source, target
+            node = "{rel}({s}; {t})".format(
+                rel=res.edges[source, target, key]["label"], s=source, t=target
             )
             new_attr = deepcopy(attr)
             new_attr["node_type"] = "relation"
