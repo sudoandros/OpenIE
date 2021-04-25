@@ -3,6 +3,7 @@ import logging
 import xml.etree.ElementTree as ET
 from copy import deepcopy
 from itertools import chain, groupby, product
+from pprint import pformat
 from typing import (
     Dict,
     FrozenSet,
@@ -78,6 +79,7 @@ class RelGraph:
 
     def merge_relations(self):
         while True:
+            self._add_implicit_is_a_relations()
             same_name_nodes_to_merge_sets = self._find_same_name_nodes_to_merge()
             for same_name_nodes_to_merge in same_name_nodes_to_merge_sets:
                 self._merge_nodes(same_name_nodes_to_merge)
@@ -182,6 +184,7 @@ class RelGraph:
         description: Union[str, Set[str]],
         weight: int = 1,
         feat_type: Union[int, Set[int]] = 0,
+        inherit: bool = True,
     ):
         if label in ["_is_a_", "_relates_to_"]:
             key = label
@@ -220,10 +223,11 @@ class RelGraph:
             )
             self._graph[source][target][key]["weight"] += weight
 
-        self._inherit_relation(source, target, key)
+        if inherit:
+            self._inherit_relation(source, target, key)
         return key
 
-    def _inherit_relation(self, source, target, key):
+    def _inherit_relation(self, source: str, target: str, key: str):
         if key == "_is_a_":
             # inherit all verb relations from up the source to the target
             edges = list(self._graph.in_edges(source, keys=True)) + list(
@@ -235,12 +239,7 @@ class RelGraph:
                 self._inherit_relation(s, t, k)
         elif key != "_relates_to_":  # it's a verb relation
             # inherit this relation down the "is a" relations for the source
-            successors = [
-                node
-                for node in self._graph.successors(source)
-                if self._graph.has_edge(source, node, key="_is_a_")
-            ]
-            for node in successors:
+            for node in self._all_successors_by_relations(source, relations=["_is_a_"]):
                 self._add_edge(
                     node,
                     target,
@@ -250,15 +249,11 @@ class RelGraph:
                     self._graph[source][target][key]["description"],
                     weight=self._graph[source][target][key]["weight"],
                     feat_type=self._graph[source][target][key]["feat_type"],
+                    inherit=False,
                 )
 
             # inherit this relation down the "is a" relations for the target
-            successors = [
-                node
-                for node in self._graph.successors(target)
-                if self._graph.has_edge(target, node, key="_is_a_")
-            ]
-            for node in successors:
+            for node in self._all_successors_by_relations(target, relations=["_is_a_"]):
                 self._add_edge(
                     source,
                     node,
@@ -268,6 +263,7 @@ class RelGraph:
                     self._graph[source][target][key]["description"],
                     weight=self._graph[source][target][key]["weight"],
                     feat_type=self._graph[source][target][key]["feat_type"],
+                    inherit=False,
                 )
 
     def _add_node(
@@ -515,6 +511,131 @@ class RelGraph:
             )
             res.add(targets_to_merge)
         return res
+
+    def _add_implicit_is_a_relations(self):
+        for node in self._graph.nodes:
+            all_predecessors_by_is_a_relates_to = self._all_predecessors_by_relations(
+                node, relations=["_is_a_", "_relates_to_"]
+            )
+            for pred1, pred2 in product(all_predecessors_by_is_a_relates_to, repeat=2):
+                if self._has_implicit_is_a(pred1, pred2):
+                    self._add_edge(
+                        pred1,
+                        pred2,
+                        "_is_a_",
+                        "_is_a_",
+                        "",
+                        self._graph.nodes[pred1]["description"]
+                        | self._graph.nodes[pred2]["description"],
+                        feat_type=self._graph.nodes[pred1]["feat_type"]
+                        | self._graph.nodes[pred2]["feat_type"],
+                    )
+
+    def _has_implicit_is_a(self, node1: str, node2: str):
+        """
+        True if there is an implicit relation (node1; is a; node2)
+        """
+        if (
+            node1 == node2
+            or self._graph.has_edge(node1, node2)
+            or not (
+                self._graph.nodes[node1]["feat_type"]
+                & self._graph.nodes[node1]["feat_type"]
+            )
+        ):
+            return False
+
+        # instantiate with immediate successors by "is a" and "relates to"
+        constituents1 = {
+            successor
+            for successor in self._graph.successors(node1)
+            if set(self._graph[node1][successor]) & {"_is_a_", "_relates_to_"}
+        }
+        constituents2 = {
+            successor
+            for successor in self._graph.successors(node2)
+            if set(self._graph[node2][successor]) & {"_is_a_", "_relates_to_"}
+        }
+        # TODO more sophisticated check?
+        if len(constituents2) < 2:
+            return False
+
+        # complement with all successors by "is a"
+        constituents1 |= {
+            successor
+            for node in constituents1
+            for successor in self._all_successors_by_relations(
+                node, relations=["_is_a_"]
+            )
+        }
+        constituents2 |= {
+            successor
+            for node in constituents2
+            for successor in self._all_successors_by_relations(
+                node, relations=["_is_a_"]
+            )
+        }
+        if constituents2.issubset(constituents1):
+            logging.info(
+                'Found implicit "is a" relation:\n'
+                + f"({node1}; is a; {node2})\n"
+                + f"All constituents of {node1}:\n"
+                + pformat(constituents1)
+                + "\n"
+                + f"All constituents of {node2}:\n"
+                + pformat(constituents2)
+            )
+            return True
+        else:
+            return False
+
+    def _all_predecessors_by_relations(
+        self, node: str, relations: Optional[List[str]] = None
+    ):
+        if relations is None:
+            relations = []
+        acc = {
+            predecessor
+            for predecessor in self._graph.predecessors(node)
+            for key in self._graph[predecessor][node]
+            if self._graph[predecessor][node][key]["label"] in relations
+        }
+        while True:
+            old_size = len(acc)
+            acc |= {
+                predecessor
+                for saved_node in acc
+                for predecessor in self._graph.predecessors(saved_node)
+                for key in self._graph[predecessor][saved_node]
+                if self._graph[predecessor][saved_node][key]["label"] in relations
+            }
+            if len(acc) == old_size:  # accumulator hasn't changed
+                break
+        return acc
+
+    def _all_successors_by_relations(
+        self, node: str, relations: Optional[List[str]] = None
+    ):
+        if relations is None:
+            relations = []
+        acc = {
+            successor
+            for successor in self._graph.successors(node)
+            for key in self._graph[node][successor]
+            if self._graph[node][successor][key]["label"] in relations
+        }
+        while True:
+            old_size = len(acc)
+            acc |= {
+                successor
+                for saved_node in acc
+                for successor in self._graph.successors(saved_node)
+                for key in self._graph[saved_node][successor]
+                if self._graph[saved_node][successor][key]["label"] in relations
+            }
+            if len(acc) == old_size:  # accumulator hasn't changed
+                break
+        return acc
 
     def _merge_nodes(self, nodes):
         def new_set_attr_value(attr_key):
