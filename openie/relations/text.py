@@ -471,11 +471,14 @@ class RelGraph:
             logging.info(
                 "Found same name sources to merge:\n"
                 + "\n".join(
-                    str(self._graph.nodes[node]["label"]) for node in sources_to_merge
+                    " | ".join(self._graph.nodes[node]["label"])
+                    for node in sources_to_merge
                 )
                 + "\n"
                 + "because of the next similar targets:\n"
-                + "\n".join(str(self._graph.nodes[node]["label"]) for node in targets)
+                + "\n".join(
+                    " | ".join(self._graph.nodes[node]["label"]) for node in targets
+                )
             )
             res.add(sources_to_merge)
         return res
@@ -501,13 +504,16 @@ class RelGraph:
             if len(targets_to_merge) < 2:
                 continue
             logging.info(
-                "Found same name sources to merge:\n"
+                "Found same name targets to merge:\n"
                 + "\n".join(
-                    str(self._graph.nodes[node]["label"]) for node in targets_to_merge
+                    " | ".join(self._graph.nodes[node]["label"])
+                    for node in targets_to_merge
                 )
                 + "\n"
                 + "because of the next similar targets:\n"
-                + "\n".join(str(self._graph.nodes[node]["label"]) for node in sources)
+                + "\n".join(
+                    " | ".join(self._graph.nodes[node]["label"]) for node in sources
+                )
             )
             res.add(targets_to_merge)
         return res
@@ -577,13 +583,25 @@ class RelGraph:
         }
         if constituents2.issubset(constituents1):
             logging.info(
-                'Found implicit "is a" relation:\n'
-                + f"({node1}; is a; {node2})\n"
-                + f"All constituents of {node1}:\n"
-                + pformat(constituents1)
-                + "\n"
-                + f"All constituents of {node2}:\n"
-                + pformat(constituents2)
+                (
+                    'Found implicit "is a" relation:\n'
+                    + "({node1_label}; is a; {node2_label})\n"
+                    + "All constituents of {node1_label}:\n"
+                    + "{constituents1}\n"
+                    + "All constituents of {node2_label}:\n"
+                    + "{constituents2}\n"
+                ).format(
+                    node1_label=" | ".join(self._graph.nodes[node1]["label"]),
+                    node2_label=" | ".join(self._graph.nodes[node2]["label"]),
+                    constituents1="\n".join(
+                        " | ".join(self._graph.nodes[constituent]["label"])
+                        for constituent in constituents1
+                    ),
+                    constituents2="\n".join(
+                        " | ".join(self._graph.nodes[constituent]["label"])
+                        for constituent in constituents2
+                    ),
+                )
             )
             return True
         else:
