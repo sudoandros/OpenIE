@@ -35,7 +35,7 @@ class RelGraph:
         self._graph = nx.MultiDiGraph()
 
     @classmethod
-    def from_reltuples_iter(cls, reltuples_iter: Sequence[SentenceReltuples]):
+    def from_reltuples_iter(cls, reltuples_iter: Iterable[SentenceReltuples]):
         graph = cls()
         for sentence_reltuple in reltuples_iter:
             graph.add_sentence_reltuples(sentence_reltuple)
@@ -612,12 +612,7 @@ class RelGraph:
     ):
         if relations is None:
             relations = []
-        acc = {
-            predecessor
-            for predecessor in self._graph.predecessors(node)
-            for key in self._graph[predecessor][node]
-            if self._graph[predecessor][node][key]["label"] in relations
-        }
+        acc = {node}
         while True:
             old_size = len(acc)
             acc |= {
@@ -629,6 +624,7 @@ class RelGraph:
             }
             if len(acc) == old_size:  # accumulator hasn't changed
                 break
+        acc.remove(node)
         return acc
 
     def _all_successors_by_relations(
@@ -636,12 +632,7 @@ class RelGraph:
     ):
         if relations is None:
             relations = []
-        acc = {
-            successor
-            for successor in self._graph.successors(node)
-            for key in self._graph[node][successor]
-            if self._graph[node][successor][key]["label"] in relations
-        }
+        acc = {node}
         while True:
             old_size = len(acc)
             acc |= {
@@ -653,6 +644,7 @@ class RelGraph:
             }
             if len(acc) == old_size:  # accumulator hasn't changed
                 break
+        acc.remove(node)
         return acc
 
     def _merge_nodes(self, nodes):
@@ -874,7 +866,7 @@ class TextReltuples:
         self, conllu, w2v_model, stopwords, additional_relations, entities_limit,
     ):
         sentences = openie.syntax.read_parsed(conllu, "conllu")
-        self._reltuples: Sequence[SentenceReltuples] = []
+        self._reltuples: List[SentenceReltuples] = []
         self._dict = {}
         self._graph = RelGraph()
         for s in sentences:
