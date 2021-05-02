@@ -615,7 +615,7 @@ class RelGraph:
 
     def _all_predecessors_by_relations(
         self, node: str, relations: Optional[List[str]] = None
-    ):
+    ) -> Set[str]:
         if relations is None:
             relations = []
         acc = {node}
@@ -624,9 +624,10 @@ class RelGraph:
             acc |= {
                 predecessor
                 for saved_node in acc
-                for predecessor in self._graph.predecessors(saved_node)
-                for key in self._graph[predecessor][saved_node]
-                if self._graph[predecessor][saved_node][key]["label"] in relations
+                for predecessor, _, label in self._graph.in_edges(
+                    saved_node, data="label"
+                )
+                if label in relations
             }
             if len(acc) == old_size:  # accumulator hasn't changed
                 break
@@ -635,7 +636,7 @@ class RelGraph:
 
     def _all_successors_by_relations(
         self, node: str, relations: Optional[List[str]] = None
-    ):
+    ) -> Set[str]:
         if relations is None:
             relations = []
         acc = {node}
@@ -644,9 +645,10 @@ class RelGraph:
             acc |= {
                 successor
                 for saved_node in acc
-                for successor in self._graph.successors(saved_node)
-                for key in self._graph[saved_node][successor]
-                if self._graph[saved_node][successor][key]["label"] in relations
+                for _, successor, label in self._graph.out_edges(
+                    saved_node, data="label"
+                )
+                if label in relations
             }
             if len(acc) == old_size:  # accumulator hasn't changed
                 break
@@ -913,8 +915,6 @@ class TextReltuples:
     @property
     def dictionary(self):
         return self._dict
-
-    # TODO iterate over reltuples by __iter__?
 
     def _cluster(
         self, min_cluster_size=10, max_cluster_size=100, cluster_size_step=10
