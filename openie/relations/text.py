@@ -307,11 +307,12 @@ class RelGraph:
     def _find_neighbor_targets_to_merge(self, source, key):
         return {
             target
-            for target in self._graph.successors(source)
-            if self._graph.has_edge(source, target, key=key)
+            for _, target, k, label in self._graph.out_edges(
+                source, keys=True, data="label"
+            )
+            if k == key
             and (
-                self._graph[source][target][key]["label"]
-                not in ["_is_a_", "_relates_to_"]
+                label not in ["_is_a_", "_relates_to_"]
                 or self._graph.nodes[source]["label"]
                 == self._graph.nodes[target]["label"]
             )
@@ -320,11 +321,12 @@ class RelGraph:
     def _find_neighbor_sources_to_merge(self, target, key):
         return {
             source
-            for source in self._graph.predecessors(target)
-            if self._graph.has_edge(source, target, key=key)
+            for source, _, k, label in self._graph.in_edges(
+                target, keys=True, data="label"
+            )
+            if k == key
             and (
-                self._graph[source][target][key]["label"]
-                not in ["_is_a_", "_relates_to_"]
+                label not in ["_is_a_", "_relates_to_"]
                 or self._graph.nodes[source]["label"]
                 == self._graph.nodes[target]["label"]
             )
