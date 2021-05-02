@@ -520,21 +520,27 @@ class RelGraph:
 
     def _add_implicit_is_a_relations(self):
         for node in self._graph.nodes:
-            all_predecessors_by_is_a_relates_to = self._all_predecessors_by_relations(
-                node, relations=["_is_a_", "_relates_to_"]
+            all_predecessors_by_is_a = self._all_predecessors_by_relations(
+                node, relations=["_is_a_"]
             )
-            for pred1, pred2 in product(all_predecessors_by_is_a_relates_to, repeat=2):
-                if self._has_implicit_is_a(pred1, pred2):
+            to_check = all_predecessors_by_is_a | {
+                pred
+                for node in all_predecessors_by_is_a
+                for pred in self._graph.predecessors(node)
+                if set(self._graph[pred][node]) & {"_is_a_", "_relates_to_"}
+            }  # FIXME is it necessary?
+            for node1, node2 in product(to_check, repeat=2):
+                if self._has_implicit_is_a(node1, node2):
                     self._add_edge(
-                        pred1,
-                        pred2,
+                        node1,
+                        node2,
                         "_is_a_",
                         "_is_a_",
                         "",
-                        self._graph.nodes[pred1]["description"]
-                        | self._graph.nodes[pred2]["description"],
-                        feat_type=self._graph.nodes[pred1]["feat_type"]
-                        | self._graph.nodes[pred2]["feat_type"],
+                        self._graph.nodes[node1]["description"]
+                        | self._graph.nodes[node2]["description"],
+                        feat_type=self._graph.nodes[node1]["feat_type"]
+                        | self._graph.nodes[node2]["feat_type"],
                     )
 
     def _has_implicit_is_a(self, node1: str, node2: str):
