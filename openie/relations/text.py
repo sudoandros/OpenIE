@@ -521,23 +521,28 @@ class RelGraph:
         return res
 
     def _add_implicit_is_a_relations(self):
+        have_is_a: List[Tuple[str, str]] = []
         for node in self._graph.nodes:
             all_predecessors_by_is_a = self._all_predecessors_by_relations(
                 node, relations=["_is_a_"]
             )
             for node1, node2 in product(all_predecessors_by_is_a, repeat=2):
                 if self._has_implicit_is_a(node1, node2):
-                    self._add_edge(
-                        node1,
-                        node2,
-                        "_is_a_",
-                        "_is_a_",
-                        "",
-                        self._graph.nodes[node1]["description"]
-                        | self._graph.nodes[node2]["description"],
-                        feat_type=self._graph.nodes[node1]["feat_type"]
-                        | self._graph.nodes[node2]["feat_type"],
-                    )
+                    have_is_a.append((node1, node2))
+        for node1, node2 in have_is_a:
+            self._add_edge(
+                node1,
+                node2,
+                "_is_a_",
+                "_is_a_",
+                "",
+                self._graph.nodes[node1]["description"]
+                | self._graph.nodes[node2]["description"],
+                feat_type=self._graph.nodes[node1]["feat_type"]
+                | self._graph.nodes[node2]["feat_type"],
+            )
+        if len(have_is_a) > 0:
+            self._add_implicit_is_a_relations()
 
     def _has_implicit_is_a(self, node1: str, node2: str):
         """
