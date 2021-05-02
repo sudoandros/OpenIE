@@ -525,13 +525,7 @@ class RelGraph:
             all_predecessors_by_is_a = self._all_predecessors_by_relations(
                 node, relations=["_is_a_"]
             )
-            to_check = all_predecessors_by_is_a | {
-                pred
-                for node in all_predecessors_by_is_a
-                for pred in self._graph.predecessors(node)
-                if set(self._graph[pred][node]) & {"_is_a_", "_relates_to_"}
-            }  # FIXME is it necessary?
-            for node1, node2 in product(to_check, repeat=2):
+            for node1, node2 in product(all_predecessors_by_is_a, repeat=2):
                 if self._has_implicit_is_a(node1, node2):
                     self._add_edge(
                         node1,
