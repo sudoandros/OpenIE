@@ -2,8 +2,7 @@ import io
 import logging
 import xml.etree.ElementTree as ET
 from copy import deepcopy
-from itertools import chain, groupby, product
-from pprint import pformat
+from itertools import chain, combinations, groupby, product
 from typing import (
     Dict,
     FrozenSet,
@@ -333,18 +332,19 @@ class RelGraph:
         }
 
     def _filter_node_merge_candidates(self, nodes: Set[str]):
-        res = nodes.copy()
-        for node1, node2 in product(nodes, repeat=2):
-            if node1 != node2 and (
+        to_remove: List[str] = []
+        for node1, node2 in combinations(nodes, 2):
+            if (
                 self._graph.has_edge(node1, node2)
+                or self._graph.has_edge(node2, node1)
                 or (
                     self._graph.nodes[node1]["description"]
                     & self._graph.nodes[node2]["description"]
                 )
             ):
-                res.discard(node1)
-                res.discard(node2)
-        return res
+                to_remove.append(node1)
+                to_remove.append(node2)
+        return nodes - set(to_remove)
 
     def _find_close_nodes(
         self, nodes: Iterable[str], distance_threshold: float
