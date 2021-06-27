@@ -3,17 +3,7 @@ import logging
 import xml.etree.ElementTree as ET
 from copy import deepcopy
 from itertools import chain, combinations, groupby, product
-from typing import (
-    Dict,
-    FrozenSet,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import Dict, FrozenSet, Iterable, List, Optional, Set, Tuple, TypeVar, Union
 
 import networkx as nx
 import networkx.algorithms.components
@@ -24,6 +14,7 @@ from openie.relations.sentence import SentenceReltuples
 from sklearn.metrics import silhouette_score
 from sklearn_extra.cluster import KMedoids
 
+T = TypeVar("T", int, str, float)
 MIN_CLUSTER_SIZE = 50
 NODE_DISTANCE_THRESHOLD = 0.3
 SAME_NAME_NODE_DISTANCE_THRESHOLD = 0.5
@@ -450,7 +441,7 @@ class RelGraph:
         return res
 
     def _find_same_name_sources_to_merge(self):
-        # TODO merge with _find_same_name_targets_to_merged into a single function?
+        # TODO merge with _find_same_name_targets_to_merge into a single function?
         labels_edges_dict: Dict[Tuple[str, str], Set[Tuple[str, str, str]]] = {}
         for s, t, k in self._graph.edges:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
@@ -522,6 +513,8 @@ class RelGraph:
 
     def _add_implicit_is_a_relations(self):
         have_is_a: List[Tuple[str, str]] = []
+
+        # find nodes with implicit "is a"
         for node in self._graph.nodes:
             all_predecessors_by_is_a = self._all_predecessors_by_relations(
                 node, relations=["_is_a_"]
@@ -529,6 +522,8 @@ class RelGraph:
             for node1, node2 in product(all_predecessors_by_is_a, repeat=2):
                 if self._has_implicit_is_a(node1, node2):
                     have_is_a.append((node1, node2))
+
+        # connect nodes with implicit "is a"
         for node1, node2 in have_is_a:
             self._add_edge(
                 node1,
@@ -541,6 +536,7 @@ class RelGraph:
                 feat_type=self._graph.nodes[node1]["feat_type"]
                 | self._graph.nodes[node2]["feat_type"],
             )
+
         if len(have_is_a) > 0:
             self._add_implicit_is_a_relations()
 
@@ -802,6 +798,7 @@ class RelGraph:
         for node in res:
             res.nodes[node]["node_type"] = "argument"
         for source, target, key, attr in list(res.edges(data=True, keys=True)):
+            # FIXME shouldn't it include cluster number?
             node = "{rel}({s}; {t})".format(
                 rel=res.edges[source, target, key]["label"], s=source, t=target
             )
@@ -946,9 +943,7 @@ class TextReltuples:
         return res_labels.tolist()
 
 
-def _to_set_if_not_already(
-    value: Union[str, int, float, Iterable[str], Iterable[int], Iterable[float]]
-):
+def _to_set_if_not_already(value: Union[T, Iterable[T]]) -> Set[T]:
     if isinstance(value, (str, int, float)):
         return {value}
     else:

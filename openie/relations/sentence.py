@@ -1,10 +1,12 @@
 import logging
-from typing import NamedTuple
+from dataclasses import dataclass
+from typing import Iterable, List, Literal, Optional, Set, Tuple, Union
 
 import numpy as np
 
 
-class Reltuple(NamedTuple):
+@dataclass
+class Reltuple:
     left_arg: str
     left_arg_lemmas: str
     left_w2v: np.ndarray
@@ -17,10 +19,16 @@ class Reltuple(NamedTuple):
 
 
 class SentenceReltuples:
-    def __init__(self, sentence, w2v_model, additional_relations=False, stopwords=[]):
+    def __init__(
+        self,
+        sentence,
+        w2v_model,
+        additional_relations: bool = False,
+        stopwords: Iterable[str] = None,
+    ):
         self.sentence = sentence
         self.sentence_vector = _get_phrase_vector(sentence, "all", w2v_model)
-        self._stopwords = set(stopwords)
+        self._stopwords: Set[str] = set() if stopwords is None else set(stopwords)
         words_ids_tuples = self._get_words_ids_tuples(
             additional_relations=additional_relations
         )
@@ -31,21 +39,19 @@ class SentenceReltuples:
             if reltuple.left_arg != reltuple.right_arg
         ]
         logging.info(
-            "{} relations were extracted from the sentence {}:\n".format(
-                len(self._reltuples), self.sentence.getText()
-            )
+            f"{len(self._reltuples)} relations were extracted from the sentence {self.sentence.getText()}:\n"
             + "\n".join(
-                "({}, {}, {})".format(
-                    reltuple.left_arg, reltuple.relation, reltuple.right_arg
-                )
+                f"({reltuple.left_arg}, {reltuple.relation}, {reltuple.right_arg})"
                 for reltuple in self._reltuples
             )
         )
 
-    def __getitem__(self, index):
+    def __getitem__(self, index: int):
         return self._reltuples[index]
 
-    def _to_tuple(self, reltuple, w2v_model):
+    def _to_tuple(
+        self, reltuple: Tuple[List[int], Union[List[int], str], List[int]], w2v_model,
+    ):
         left_arg = self._arg_to_string(reltuple[0], lemmatized=False)
         left_arg_lemmas = self._arg_to_string(reltuple[0], lemmatized=True)
         left_w2v = _get_phrase_vector(self.sentence, reltuple[0], w2v_model)
@@ -55,7 +61,7 @@ class SentenceReltuples:
 
         right_arg = self._arg_to_string(reltuple[2], lemmatized=False)
         right_arg_lemmas = self._arg_to_string(reltuple[2], lemmatized=True)
-        right_deprel = self.sentence.words[self._get_root(reltuple[2]).id].deprel
+        right_deprel: str = self.sentence.words[self._get_root(reltuple[2]).id].deprel
         right_w2v = _get_phrase_vector(self.sentence, reltuple[2], w2v_model)
 
         return Reltuple(
@@ -70,7 +76,9 @@ class SentenceReltuples:
             right_w2v,
         )
 
-    def _relation_to_string(self, relation, lemmatized=False):
+    def _relation_to_string(
+        self, relation: Union[List[int], str], lemmatized: bool = False
+    ):
         if isinstance(relation, list) and not lemmatized:
             string_ = " ".join(self.sentence.words[id_].form for id_ in relation)
         elif isinstance(relation, list) and lemmatized:
@@ -81,7 +89,7 @@ class SentenceReltuples:
             raise TypeError
         return self._clean_string(string_)
 
-    def _arg_to_string(self, words_ids, lemmatized=False):
+    def _arg_to_string(self, words_ids: List[int], lemmatized: bool = False):
         if lemmatized:
             string_ = " ".join(
                 self.sentence.words[id_].lemma.strip() for id_ in words_ids
@@ -93,7 +101,7 @@ class SentenceReltuples:
         return self._clean_string(string_)
 
     @staticmethod
-    def _clean_string(string_):
+    def _clean_string(string_: str):
         res = (
             "".join(
                 char
@@ -105,8 +113,8 @@ class SentenceReltuples:
         )
         return res
 
-    def _get_words_ids_tuples(self, additional_relations=False):
-        result = []
+    def _get_words_ids_tuples(self, additional_relations: bool = False):
+        result: List[Tuple[List[int], Union[List[int], str], List[int]]] = []
         for word in self.sentence.words:
             if word.deprel == "cop":
                 result += self._get_copula_reltuples(word)
@@ -128,7 +136,7 @@ class SentenceReltuples:
         for child_id in verb.children:
             child = self.sentence.words[child_id]
             if child.deprel == "xcomp":
-                return ()
+                return []
         subjects = self._get_subjects(verb)
         right_args = self._get_right_args(verb)
         return [
@@ -144,8 +152,8 @@ class SentenceReltuples:
         relation = self._get_copula(copula)
         return [(subj, relation, right_arg) for subj in subjects]
 
-    def _get_additional_reltuples(self, words_ids):
-        result = []
+    def _get_additional_reltuples(self, words_ids: List[int]):
+        result: List[Tuple[List[int], str, List[int]]] = []
         is_a_deprels = ["appos", "flat", "flat:foreign", "flat:name", "conj"]
         relates_to_deprels = ["nmod"]
         main_phrase_ids = words_ids
@@ -187,14 +195,14 @@ class SentenceReltuples:
             result.append((main_phrase_ids, "_is_a_", [root.id]))
         return result
 
-    def _get_relation(self, word, right_arg=None):
+    def _get_relation(self, word, right_arg: Optional[List[int]] = None):
         prefix = self._get_relation_prefix(word)
         postfix = self._get_relation_postfix(word, right_arg=right_arg)
-        relation = prefix + [word.id] + postfix
+        relation: List[int] = prefix + [word.id] + postfix
         return relation
 
     def _get_relation_prefix(self, relation):
-        prefix = []
+        prefix: List[int] = []
         for child_id in relation.children:
             child = self.sentence.words[child_id]
             if (
@@ -212,8 +220,8 @@ class SentenceReltuples:
             prefix = self._get_relation(grandparent) + prefix
         return prefix
 
-    def _get_relation_postfix(self, relation, right_arg=None):
-        postfix = []
+    def _get_relation_postfix(self, relation, right_arg: Optional[List[int]] = None):
+        postfix: List[int] = []
         for child_id in relation.children:
             child = self.sentence.words[child_id]
             if (
@@ -254,7 +262,7 @@ class SentenceReltuples:
         return [words_ids]
 
     def _get_verb_right_args(self, word):
-        args_list = []
+        args_list: List[List[int]] = []
         for child_id in word.children:
             child = self.sentence.words[child_id]
             if self._is_right_arg(child):
@@ -268,7 +276,7 @@ class SentenceReltuples:
         return args_list
 
     def _get_subjects(self, word):
-        subj_list = []
+        subj_list: List[List[int]] = []
         for child_id in word.children:
             child = self.sentence.words[child_id]
             if self._is_subject(child):
@@ -278,7 +286,7 @@ class SentenceReltuples:
             subj_list = self._get_subjects(parent)
         return subj_list
 
-    def _get_subtree(self, word):
+    def _get_subtree(self, word) -> List[int]:
         if not list(word.children):
             return [word.id]
         res_ids = []
@@ -291,7 +299,7 @@ class SentenceReltuples:
             res_ids.extend(self._get_subtree(child))
         return res_ids
 
-    def _get_first_case(self, words_ids):
+    def _get_first_case(self, words_ids: List[int]):
         root = self._get_root(words_ids)
         for id_ in words_ids:
             word = self.sentence.words[id_]
@@ -301,7 +309,7 @@ class SentenceReltuples:
 
     def _get_copula(self, word):
         parent = self.sentence.words[word.head]
-        part_ids = []
+        part_ids: List[int] = []
         for sibling_id in parent.children:
             sibling = self.sentence.words[sibling_id]
             if sibling.id == word.id:
@@ -320,7 +328,7 @@ class SentenceReltuples:
                 res.append(self._get_copula(child))
         return res
 
-    def _get_root(self, words_ids):
+    def _get_root(self, words_ids: List[int]):
         root = None
         for id_ in words_ids:
             word = self.sentence.words[id_]
@@ -328,7 +336,7 @@ class SentenceReltuples:
                 root = word
         return root
 
-    def _is_stopwords(self, words_ids):
+    def _is_stopwords(self, words_ids: List[int]) -> bool:
         return {self.sentence.words[id_].lemma for id_ in words_ids}.issubset(
             self._stopwords
         ) or (
@@ -350,9 +358,11 @@ class SentenceReltuples:
         return word.deprel == "conj"
 
 
-def _get_phrase_vector(sentence, words_ids, w2v_model) -> np.ndarray:
+def _get_phrase_vector(
+    sentence, words_ids: Union[List[int], Literal["all"]], w2v_model
+) -> np.ndarray:
     if words_ids == "all":
-        words_ids = range(len(sentence.words))
+        words_ids = list(range(len(sentence.words)))
     vector = np.zeros(300)
     count = 0
     for word_id in words_ids:
