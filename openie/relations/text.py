@@ -48,14 +48,14 @@ class RelGraph:
                 sentence_text,
                 label=reltuple.left_arg,
                 vector=reltuple.left_w2v,
-                feat_type=cluster,
+                cluster=cluster,
             )
             target = self._add_node(
                 reltuple.right_arg_lemmas,
                 sentence_text,
                 label=reltuple.right_arg,
                 vector=reltuple.right_w2v,
-                feat_type=cluster,
+                cluster=cluster,
             )
             self._add_edge(
                 source,
@@ -64,7 +64,7 @@ class RelGraph:
                 reltuple.relation_lemmas,
                 reltuple.right_deprel,
                 sentence_text,
-                feat_type=cluster,
+                cluster=cluster,
             )
 
     def merge_relations(self):
@@ -173,7 +173,7 @@ class RelGraph:
         deprel: str,
         description: Union[str, Set[str]],
         weight: int = 1,
-        feat_type: Union[int, Set[int]] = 0,
+        cluster: Union[int, Set[int]] = 0,
         inherit: bool = True,
     ):
         if label in ["_is_a_", "_relates_to_"]:
@@ -181,7 +181,7 @@ class RelGraph:
         else:
             key = f"{lemmas} + {deprel}"
         description = _to_set_if_not_already(description)
-        feat_type = _to_set_if_not_already(feat_type)
+        cluster = _to_set_if_not_already(cluster)
         if not self._graph.has_edge(source, target, key=key):
             # it's a new edge
             color = {"b": 0, "g": 0, "r": 0}
@@ -200,7 +200,7 @@ class RelGraph:
                 deprel=deprel,
                 description=description,
                 weight=weight,
-                feat_type=feat_type,
+                cluster=cluster,
                 viz={"color": color},
             )
         else:
@@ -208,8 +208,8 @@ class RelGraph:
             self._graph[source][target][key]["description"] = (
                 description | self._graph[source][target][key]["description"]
             )
-            self._graph[source][target][key]["feat_type"] = (
-                feat_type | self._graph[source][target][key]["feat_type"]
+            self._graph[source][target][key]["cluster"] = (
+                cluster | self._graph[source][target][key]["cluster"]
             )
             self._graph[source][target][key]["weight"] += weight
 
@@ -238,7 +238,7 @@ class RelGraph:
                     self._graph[source][target][key]["deprel"],
                     self._graph[source][target][key]["description"],
                     weight=self._graph[source][target][key]["weight"],
-                    feat_type=self._graph[source][target][key]["feat_type"],
+                    cluster=self._graph[source][target][key]["cluster"],
                     inherit=False,
                 )
 
@@ -252,7 +252,7 @@ class RelGraph:
                     self._graph[source][target][key]["deprel"],
                     self._graph[source][target][key]["description"],
                     weight=self._graph[source][target][key]["weight"],
-                    feat_type=self._graph[source][target][key]["feat_type"],
+                    cluster=self._graph[source][target][key]["cluster"],
                     inherit=False,
                 )
 
@@ -263,12 +263,12 @@ class RelGraph:
         label: Union[str, Set[str]],
         weight: int = 1,
         vector: Optional[np.ndarray] = None,
-        feat_type: Union[int, Set[int]] = 0,
+        cluster: Union[int, Set[int]] = 0,
     ):
         description = _to_set_if_not_already(description)
-        feat_type = _to_set_if_not_already(feat_type)
+        cluster = _to_set_if_not_already(cluster)
         label = _to_set_if_not_already(label)
-        node = f"{lemmas} + {feat_type}"
+        node = f"{lemmas} + {cluster}"
         if node not in self._graph:
             self._graph.add_node(
                 node,
@@ -277,7 +277,7 @@ class RelGraph:
                 description=description,
                 weight=weight,
                 vector=vector,
-                feat_type=feat_type,
+                cluster=cluster,
             )
         else:
             # this node already exists
@@ -285,8 +285,8 @@ class RelGraph:
             self._graph.nodes[node]["description"] = (
                 description | self._graph.nodes[node]["description"]
             )
-            self._graph.nodes[node]["feat_type"] = (
-                feat_type | self._graph.nodes[node]["feat_type"]
+            self._graph.nodes[node]["cluster"] = (
+                cluster | self._graph.nodes[node]["cluster"]
             )
             self._graph.nodes[node]["vector"] = (
                 self._graph.nodes[node]["vector"] + vector
@@ -386,7 +386,7 @@ class RelGraph:
             for _, _, key, attr in self._graph.out_edges(source, keys=True, data=True)
             if self._graph.has_edge(source, target, key=key)
             and attr["label"] not in ["_is_a_", "_relates_to_"]
-            for cluster in attr["feat_type"]
+            for cluster in attr["cluster"]
         ]
 
         keys.sort(key=lambda elem: elem[1:])
@@ -410,8 +410,8 @@ class RelGraph:
             return set()
 
         edges = set()
-        for s, t, key, feat_type in self._graph.edges(keys=True, data="feat_type"):
-            if key in keys and cluster in feat_type:
+        for s, t, key, cluster in self._graph.edges(keys=True, data="cluster"):
+            if key in keys and cluster in cluster:
                 edges.add((s, t, key))
 
         # relations from the same sentence are out
@@ -533,8 +533,8 @@ class RelGraph:
                 "",
                 self._graph.nodes[node1]["description"]
                 | self._graph.nodes[node2]["description"],
-                feat_type=self._graph.nodes[node1]["feat_type"]
-                | self._graph.nodes[node2]["feat_type"],
+                cluster=self._graph.nodes[node1]["cluster"]
+                | self._graph.nodes[node2]["cluster"],
             )
 
         if len(have_is_a) > 0:
@@ -548,8 +548,8 @@ class RelGraph:
             node1 == node2
             or self._graph.has_edge(node1, node2)
             or not (
-                self._graph.nodes[node1]["feat_type"]
-                & self._graph.nodes[node1]["feat_type"]
+                self._graph.nodes[node1]["cluster"]
+                & self._graph.nodes[node1]["cluster"]
             )
         ):
             return False
@@ -668,18 +668,13 @@ class RelGraph:
         new_lemmas = new_str_attr_value("lemmas")
         new_label = new_set_attr_value("label")
         new_description = new_set_attr_value("description")
-        new_feat_type = new_set_attr_value("feat_type")
-        new_weight = sum(self._graph.nodes[node]["weight"] for node in nodes)
-        new_vector = sum(self._graph.nodes[node]["vector"] for node in nodes) / len(
-            nodes
-        )
+        new_cluster = new_set_attr_value("cluster")
+        new_weight: int = sum(self._graph.nodes[node]["weight"] for node in nodes)
+        new_vector: np.ndarray = sum(
+            self._graph.nodes[node]["vector"] for node in nodes
+        ) / len(nodes)
         new_node = self._add_node(
-            new_lemmas,
-            new_description,
-            new_label,
-            new_weight,
-            new_vector,
-            new_feat_type,
+            new_lemmas, new_description, new_label, new_weight, new_vector, new_cluster,
         )
 
         for source, target, key in self._graph.edges(nodes, keys=True):
@@ -697,7 +692,7 @@ class RelGraph:
                 self._graph.edges[source, target, key]["deprel"],
                 self._graph.edges[source, target, key]["description"],
                 weight=self._graph.edges[source, target, key]["weight"],
-                feat_type=new_feat_type,
+                cluster=new_cluster,
             )
 
         for node in nodes:
@@ -728,7 +723,7 @@ class RelGraph:
                 new_deprel,
                 self._graph[source][target][key]["description"],
                 weight=new_weight,
-                feat_type=self._graph[source][target][key]["feat_type"],
+                cluster=self._graph[source][target][key]["cluster"],
             )
             self._graph.remove_edge(source, target, key=key)
 
@@ -788,7 +783,7 @@ class RelGraph:
                         self._graph[node][succ][key_succ]["deprel"],
                         self._graph[node][succ][key_succ]["description"],
                         weight=self._graph[node][succ][key_succ]["weight"],
-                        feat_type=self._graph[node][succ][key_succ]["feat_type"],
+                        cluster=self._graph[node][succ][key_succ]["cluster"],
                     )
             self._graph.remove_node(node)
 
@@ -820,8 +815,9 @@ class RelGraph:
                 res.nodes[node]["label"] = " | ".join(res.nodes[node]["label"])
             res.nodes[node]["description"] = " | ".join(res.nodes[node]["description"])
             res.nodes[node]["feat_type"] = " | ".join(
-                str(elem) for elem in res.nodes[node]["feat_type"]
+                str(elem) for elem in res.nodes[node]["cluster"]
             )
+            del res.nodes[node]["cluster"]
         return res
 
     @staticmethod
