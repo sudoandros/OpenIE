@@ -3,7 +3,18 @@ import logging
 import xml.etree.ElementTree as ET
 from copy import deepcopy
 from itertools import chain, combinations, groupby, product
-from typing import Dict, FrozenSet, Iterable, List, Optional, Set, Tuple, TypeVar, Union
+from typing import (
+    Dict,
+    FrozenSet,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import networkx as nx
 import networkx.algorithms.components
@@ -220,10 +231,10 @@ class RelGraph:
     def _inherit_relation(self, source: str, target: str, key: str):
         if key == "_is_a_":
             # inherit all verb relations from up the source to the target
-            edges = list(self._graph.in_edges(source, keys=True)) + list(
+            for s, t, k in chain(
+                self._graph.in_edges(source, keys=True),
                 self._graph.out_edges(source, keys=True),
-            )
-            for s, t, k in edges:
+            ):
                 if k in ["_is_a_", "_relates_to_"]:
                     continue
                 self._inherit_relation(s, t, k)
@@ -565,7 +576,7 @@ class RelGraph:
             for successor in self._graph.successors(node2)
             if set(self._graph[node2][successor]) & {"_is_a_", "_relates_to_"}
         }
-        # TODO more sophisticated check?
+        # one constituent means the phrase is just noun with adjective
         if len(constituents2) < 2:
             return False
 
@@ -597,12 +608,12 @@ class RelGraph:
                     node1_label=" | ".join(self._graph.nodes[node1]["label"]),
                     node2_label=" | ".join(self._graph.nodes[node2]["label"]),
                     constituents1="\n".join(
-                        " | ".join(self._graph.nodes[constituent]["label"])
-                        for constituent in constituents1
+                        " | ".join(self._graph.nodes[node]["label"])
+                        for node in constituents1
                     ),
                     constituents2="\n".join(
-                        " | ".join(self._graph.nodes[constituent]["label"])
-                        for constituent in constituents2
+                        " | ".join(self._graph.nodes[node]["label"])
+                        for node in constituents2
                     ),
                 )
             )
@@ -652,7 +663,7 @@ class RelGraph:
         acc.remove(node)
         return acc
 
-    def _merge_nodes(self, nodes):
+    def _merge_nodes(self, nodes: Sequence[str]):
         def new_set_attr_value(attr_key):
             res = set()
             for node in nodes:
@@ -678,12 +689,12 @@ class RelGraph:
         )
 
         for source, target, key in self._graph.edges(nodes, keys=True):
-            new_source = None
-            new_target = None
             if source in nodes:  # "out" edge
                 new_source, new_target = (new_node, target)
             elif target in nodes:  # "in" edge
                 new_source, new_target = (source, new_node)
+            else:
+                continue
             self._add_edge(
                 new_source,
                 new_target,
