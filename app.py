@@ -1,3 +1,6 @@
+import os
+
+os.environ["FOR_DISABLE_CONSOLE_CTRL_HANDLER"] = "1"
 import json
 import logging
 from datetime import datetime, timedelta, timezone
