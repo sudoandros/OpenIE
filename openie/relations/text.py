@@ -55,25 +55,25 @@ class RelGraph:
         sentence_text = sentence_reltuples.sentence.getText()
         for reltuple in sentence_reltuples:
             source = self._add_node(
-                reltuple.left_arg_lemmas,
+                reltuple.left_arg.lemmas,
                 sentence_text,
-                label=reltuple.left_arg,
-                vector=reltuple.left_w2v,
+                label=reltuple.left_arg.phrase,
+                vector=reltuple.left_arg.vector,
                 cluster=cluster,
             )
             target = self._add_node(
-                reltuple.right_arg_lemmas,
+                reltuple.right_arg.lemmas,
                 sentence_text,
-                label=reltuple.right_arg,
-                vector=reltuple.right_w2v,
+                label=reltuple.right_arg.phrase,
+                vector=reltuple.right_arg.vector,
                 cluster=cluster,
             )
             self._add_edge(
                 source,
                 target,
-                reltuple.relation,
-                reltuple.relation_lemmas,
-                reltuple.right_deprel,
+                reltuple.relation.phrase,
+                reltuple.relation.lemmas,
+                reltuple.right_arg.deprel,
                 sentence_text,
                 cluster=cluster,
             )
@@ -663,7 +663,7 @@ class RelGraph:
         acc.remove(node)
         return acc
 
-    def _merge_nodes(self, nodes: Sequence[str]):
+    def _merge_nodes(self, nodes: Iterable[str]):
         def new_set_attr_value(attr_key):
             res = set()
             for node in nodes:
@@ -775,7 +775,7 @@ class RelGraph:
 
         return set(self._graph.nodes) - nodes_to_leave
 
-    def _perform_filtering(self, nodes_to_remove):
+    def _perform_filtering(self, nodes_to_remove: Iterable[str]):
         nodes_to_remove = set(nodes_to_remove)
         for node in nodes_to_remove:
             in_edges = list(self._graph.in_edges(node, keys=True))
@@ -896,7 +896,11 @@ class TextReltuples:
         for sentence_reltuples, cluster in zip(self._reltuples, cluster_labels):
             self._graph.add_sentence_reltuples(sentence_reltuples, cluster=cluster)
             self._dict[sentence_reltuples.sentence.getText()] = [
-                (reltuple.left_arg, reltuple.relation, reltuple.right_arg)
+                (
+                    reltuple.left_arg.phrase,
+                    reltuple.relation.phrase,
+                    reltuple.right_arg.phrase,
+                )
                 for reltuple in sentence_reltuples
             ]
         self._graph.merge_relations()

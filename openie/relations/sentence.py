@@ -5,17 +5,30 @@ from typing import Iterable, List, Literal, Optional, Set, Tuple, Union
 import numpy as np
 
 
-@dataclass
+@dataclass(frozen=True)
+class Argument:
+    phrase: str
+    lemmas: str
+    vector: np.ndarray
+    deprel: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class Relation:
+    phrase: str
+    lemmas: str
+
+
+@dataclass(frozen=True)
 class Reltuple:
-    left_arg: str
-    left_arg_lemmas: str
-    left_w2v: np.ndarray
-    relation: str
-    relation_lemmas: str
-    right_arg: str
-    right_arg_lemmas: str
-    right_deprel: str
-    right_w2v: np.ndarray
+    left_arg: Argument
+    relation: Relation
+    right_arg: Argument
+
+    def __str__(self) -> str:
+        return (
+            f"{self.left_arg.phrase}; {self.relation.phrase}; {self.right_arg.phrase}"
+        )
 
 
 class SentenceReltuples:
@@ -32,49 +45,40 @@ class SentenceReltuples:
         words_ids_tuples = self._get_words_ids_tuples(
             additional_relations=additional_relations
         )
-        self._reltuples = [self._to_tuple(t, w2v_model) for t in words_ids_tuples]
+        self._reltuples = [self._to_reltuple(t, w2v_model) for t in words_ids_tuples]
         self._reltuples = [
             reltuple
             for reltuple in self._reltuples
-            if reltuple.left_arg != reltuple.right_arg
+            if reltuple.left_arg.phrase != reltuple.right_arg.phrase
         ]
         logging.info(
             f"{len(self._reltuples)} relations were extracted from the sentence {self.sentence.getText()}:\n"
-            + "\n".join(
-                f"({reltuple.left_arg}, {reltuple.relation}, {reltuple.right_arg})"
-                for reltuple in self._reltuples
-            )
+            + "\n".join(f"({reltuple})" for reltuple in self._reltuples)
         )
 
     def __getitem__(self, index: int):
         return self._reltuples[index]
 
-    def _to_tuple(
+    def _to_reltuple(
         self, reltuple: Tuple[List[int], Union[List[int], str], List[int]], w2v_model,
     ):
-        left_arg = self._arg_to_string(reltuple[0], lemmatized=False)
-        left_arg_lemmas = self._arg_to_string(reltuple[0], lemmatized=True)
-        left_w2v = _get_phrase_vector(self.sentence, reltuple[0], w2v_model)
-
-        relation = self._relation_to_string(reltuple[1])
-        relation_lemmas = self._relation_to_string(reltuple[1], lemmatized=True)
-
-        right_arg = self._arg_to_string(reltuple[2], lemmatized=False)
-        right_arg_lemmas = self._arg_to_string(reltuple[2], lemmatized=True)
-        right_deprel: str = self.sentence.words[self._get_root(reltuple[2]).id].deprel
-        right_w2v = _get_phrase_vector(self.sentence, reltuple[2], w2v_model)
-
-        return Reltuple(
-            left_arg,
-            left_arg_lemmas,
-            left_w2v,
-            relation,
-            relation_lemmas,
-            right_arg,
-            right_arg_lemmas,
-            right_deprel,
-            right_w2v,
+        left_arg = Argument(
+            phrase=self._arg_to_string(reltuple[0], lemmatized=False),
+            lemmas=self._arg_to_string(reltuple[0], lemmatized=True),
+            vector=_get_phrase_vector(self.sentence, reltuple[0], w2v_model),
         )
+        relation = Relation(
+            phrase=self._relation_to_string(reltuple[1]),
+            lemmas=self._relation_to_string(reltuple[1], lemmatized=True),
+        )
+        right_arg = Argument(
+            phrase=self._arg_to_string(reltuple[2], lemmatized=False),
+            lemmas=self._arg_to_string(reltuple[2], lemmatized=True),
+            deprel=self.sentence.words[self._get_root(reltuple[2]).id].deprel,
+            vector=_get_phrase_vector(self.sentence, reltuple[2], w2v_model),
+        )
+
+        return Reltuple(left_arg, relation, right_arg)
 
     def _relation_to_string(
         self, relation: Union[List[int], str], lemmatized: bool = False
