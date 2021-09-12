@@ -2,7 +2,7 @@ import io
 import logging
 import xml.etree.ElementTree as ET
 from copy import deepcopy
-from itertools import chain, combinations, groupby, product
+from itertools import chain, combinations, groupby, product, repeat
 from typing import (
     Dict,
     FrozenSet,
@@ -13,7 +13,6 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
-    Union,
 )
 
 import networkx as nx
@@ -36,10 +35,18 @@ class RelGraph:
         self._graph = nx.MultiDiGraph()
 
     @classmethod
-    def from_reltuples_iter(cls, reltuples_iter: Iterable[SentenceReltuples]):
+    def from_reltuples(
+        cls, reltuples: Iterable[SentenceReltuples], clusters=None, entities_limit=None
+    ):
         graph = cls()
-        for sentence_reltuple in reltuples_iter:
-            graph.add_sentence_reltuples(sentence_reltuple)
+        if clusters is None:
+            clusters = repeat(0)
+        for sentence_reltuple, cluster in zip(reltuples, clusters):
+            graph._add_sentence_reltuples(sentence_reltuple, cluster)
+        graph.merge_relations()
+        if entities_limit is not None:
+            graph.filter_nodes(entities_limit)
+        return graph
 
     @property
     def nodes_number(self):
@@ -49,24 +56,24 @@ class RelGraph:
     def edges_number(self):
         return self._graph.number_of_edges()
 
-    def add_sentence_reltuples(
-        self, sentence_reltuples: SentenceReltuples, cluster: int = 0
+    def _add_sentence_reltuples(
+        self, sentence_reltuples: SentenceReltuples, cluster: int
     ):
         sentence_text = sentence_reltuples.sentence.getText()
         for reltuple in sentence_reltuples:
             source = self._add_node(
                 reltuple.left_arg.lemmas,
-                sentence_text,
-                label=reltuple.left_arg.phrase,
+                [sentence_text],
+                label=[reltuple.left_arg.phrase],
                 vector=reltuple.left_arg.vector,
-                cluster=cluster,
+                cluster=[cluster],
             )
             target = self._add_node(
                 reltuple.right_arg.lemmas,
-                sentence_text,
-                label=reltuple.right_arg.phrase,
+                [sentence_text],
+                label=[reltuple.right_arg.phrase],
                 vector=reltuple.right_arg.vector,
-                cluster=cluster,
+                cluster=[cluster],
             )
             self._add_edge(
                 source,
@@ -74,8 +81,8 @@ class RelGraph:
                 reltuple.relation.phrase,
                 reltuple.relation.lemmas,
                 reltuple.right_arg.deprel,
-                sentence_text,
-                cluster=cluster,
+                [sentence_text],
+                cluster=[cluster],
             )
 
     def merge_relations(self):
@@ -182,17 +189,17 @@ class RelGraph:
         label: str,
         lemmas: str,
         deprel: str,
-        description: Union[str, Set[str]],
+        description: Iterable[str],
         weight: int = 1,
-        cluster: Union[int, Set[int]] = 0,
+        cluster: Iterable[int] = (0,),
         inherit: bool = True,
     ):
         if label in ["_is_a_", "_relates_to_"]:
             key = label
         else:
             key = f"{lemmas} + {deprel}"
-        description = _to_set_if_not_already(description)
-        cluster = _to_set_if_not_already(cluster)
+        description = set(description)
+        cluster = set(cluster)
         if not self._graph.has_edge(source, target, key=key):
             # it's a new edge
             color = {"b": 0, "g": 0, "r": 0}
@@ -240,7 +247,7 @@ class RelGraph:
                 self._inherit_relation(s, t, k)
         elif key != "_relates_to_":  # it's a verb relation
             # inherit this relation down the "is a" relations for the source
-            for node in self._all_successors_by_relations(source, relations=["_is_a_"]):
+            for node in self._all_successors(source, by_relations=["_is_a_"]):
                 self._add_edge(
                     node,
                     target,
@@ -254,7 +261,7 @@ class RelGraph:
                 )
 
             # inherit this relation down the "is a" relations for the target
-            for node in self._all_successors_by_relations(target, relations=["_is_a_"]):
+            for node in self._all_successors(target, by_relations=["_is_a_"]):
                 self._add_edge(
                     source,
                     node,
@@ -270,15 +277,15 @@ class RelGraph:
     def _add_node(
         self,
         lemmas: str,
-        description: Union[str, Set[str]],
-        label: Union[str, Set[str]],
+        description: Iterable[str],
+        label: Iterable[str],
         weight: int = 1,
         vector: Optional[np.ndarray] = None,
-        cluster: Union[int, Set[int]] = 0,
+        cluster: Iterable[int] = (0,),
     ):
-        description = _to_set_if_not_already(description)
-        cluster = _to_set_if_not_already(cluster)
-        label = _to_set_if_not_already(label)
+        description = set(description)
+        cluster = set(cluster)
+        label = set(label)
         node = f"{lemmas} + {cluster}"
         if node not in self._graph:
             self._graph.add_node(
@@ -527,8 +534,8 @@ class RelGraph:
 
         # find nodes with implicit "is a"
         for node in self._graph.nodes:
-            all_predecessors_by_is_a = self._all_predecessors_by_relations(
-                node, relations=["_is_a_"]
+            all_predecessors_by_is_a = self._all_predecessors(
+                node, by_relations=["_is_a_"]
             )
             for node1, node2 in product(all_predecessors_by_is_a, repeat=2):
                 if self._has_implicit_is_a(node1, node2):
@@ -584,16 +591,12 @@ class RelGraph:
         constituents1 |= {
             successor
             for node in constituents1
-            for successor in self._all_successors_by_relations(
-                node, relations=["_is_a_"]
-            )
+            for successor in self._all_successors(node, by_relations=["_is_a_"])
         }
         constituents2 |= {
             successor
             for node in constituents2
-            for successor in self._all_successors_by_relations(
-                node, relations=["_is_a_"]
-            )
+            for successor in self._all_successors(node, by_relations=["_is_a_"])
         }
         if constituents2.issubset(constituents1):
             logging.info(
@@ -621,11 +624,11 @@ class RelGraph:
         else:
             return False
 
-    def _all_predecessors_by_relations(
-        self, node: str, relations: Optional[List[str]] = None
+    def _all_predecessors(
+        self, node: str, by_relations: Optional[List[str]] = None
     ) -> Set[str]:
-        if relations is None:
-            relations = []
+        if by_relations is None:
+            by_relations = []
         acc = {node}
         while True:
             old_size = len(acc)
@@ -635,18 +638,18 @@ class RelGraph:
                 for predecessor, _, label in self._graph.in_edges(
                     saved_node, data="label"
                 )
-                if label in relations
+                if label in by_relations
             }
             if len(acc) == old_size:  # accumulator hasn't changed
                 break
         acc.remove(node)
         return acc
 
-    def _all_successors_by_relations(
-        self, node: str, relations: Optional[List[str]] = None
+    def _all_successors(
+        self, node: str, by_relations: Optional[List[str]] = None
     ) -> Set[str]:
-        if relations is None:
-            relations = []
+        if by_relations is None:
+            by_relations = []
         acc = {node}
         while True:
             old_size = len(acc)
@@ -656,7 +659,7 @@ class RelGraph:
                 for _, successor, label in self._graph.out_edges(
                     saved_node, data="label"
                 )
-                if label in relations
+                if label in by_relations
             }
             if len(acc) == old_size:  # accumulator hasn't changed
                 break
@@ -667,7 +670,7 @@ class RelGraph:
         def new_set_attr_value(attr_key):
             res = set()
             for node in nodes:
-                res |= _to_set_if_not_already(self._graph.nodes[node][attr_key])
+                res |= self._graph.nodes[node][attr_key]
             return res
 
         def new_str_attr_value(attr_key):
@@ -781,24 +784,28 @@ class RelGraph:
             in_edges = list(self._graph.in_edges(node, keys=True))
             out_edges = list(self._graph.out_edges(node, keys=True))
             # if removing B: A->B->C  ==>  A->C
-            for pred, _, key_pred in in_edges:
-                for _, succ, key_succ in out_edges:
-                    if key_pred != key_succ:
-                        continue
-                    # FIXME wrong attrs in the new edge?
-                    self._add_edge(
-                        pred,
-                        succ,
-                        self._graph[node][succ][key_succ]["label"],
-                        self._graph[node][succ][key_succ]["lemmas"],
-                        self._graph[node][succ][key_succ]["deprel"],
-                        self._graph[node][succ][key_succ]["description"],
-                        weight=self._graph[node][succ][key_succ]["weight"],
-                        cluster=self._graph[node][succ][key_succ]["cluster"],
-                    )
+            for (pred, _, key_pred), (_, succ, key_succ) in product(
+                in_edges, out_edges
+            ):
+                if key_pred != key_succ:
+                    continue
+                # FIXME wrong attrs in the new edge?
+                self._add_edge(
+                    pred,
+                    succ,
+                    self._graph[node][succ][key_succ]["label"],
+                    self._graph[node][succ][key_succ]["lemmas"],
+                    self._graph[node][succ][key_succ]["deprel"],
+                    self._graph[node][succ][key_succ]["description"],
+                    weight=self._graph[node][succ][key_succ]["weight"],
+                    cluster=self._graph[node][succ][key_succ]["cluster"],
+                )
             self._graph.remove_node(node)
 
     def _transform_graph(self):
+        """
+        Transform graph to better suit for serialization and further visualization
+        """
         res = deepcopy(self._graph)
         # transform relations from edges to nodes with specific node_type
         for node in res:
@@ -833,6 +840,11 @@ class RelGraph:
 
     @staticmethod
     def _fix_gexf(root_element):
+        """
+        GraphView is quite choosy about the input files. Not every GEXF file can
+        be read by it. This function fixes GEXF XML tree to better match
+        GraphView's requirements
+        """
         graph_node = root_element.find("{http://www.gexf.net/1.1draft}graph")
         attributes_nodes = graph_node.findall(
             "{http://www.gexf.net/1.1draft}attributes"
@@ -879,23 +891,17 @@ class TextReltuples:
         self, conllu, w2v_model, stopwords, additional_relations, entities_limit,
     ):
         sentences = openie.syntax.read_parsed(conllu, "conllu")
-        self._reltuples: List[SentenceReltuples] = []
-        self._dict = {}
-        self._graph = RelGraph()
-        for s in sentences:
-            sentence_reltuples = SentenceReltuples(
+        reltuples = [
+            SentenceReltuples(
                 s,
                 w2v_model,
                 additional_relations=additional_relations,
                 stopwords=stopwords,
             )
-            self._reltuples.append(sentence_reltuples)
-        cluster_labels = self._cluster(
-            min_cluster_size=MIN_CLUSTER_SIZE, max_cluster_size=MIN_CLUSTER_SIZE + 50,
-        )
-        for sentence_reltuples, cluster in zip(self._reltuples, cluster_labels):
-            self._graph.add_sentence_reltuples(sentence_reltuples, cluster=cluster)
-            self._dict[sentence_reltuples.sentence.getText()] = [
+            for s in sentences
+        ]
+        self._dict = {
+            sentence_reltuples.sentence.getText(): [
                 (
                     reltuple.left_arg.phrase,
                     reltuple.relation.phrase,
@@ -903,8 +909,16 @@ class TextReltuples:
                 )
                 for reltuple in sentence_reltuples
             ]
-        self._graph.merge_relations()
-        self._graph.filter_nodes(entities_limit)
+            for sentence_reltuples in reltuples
+        }
+        clusters = self._cluster(
+            reltuples,
+            min_cluster_size=MIN_CLUSTER_SIZE,
+            max_cluster_size=MIN_CLUSTER_SIZE + 50,
+        )
+        self._graph = RelGraph.from_reltuples(
+            reltuples, clusters=clusters, entities_limit=entities_limit
+        )
         logging.info(
             "Relation tuples have been extracted from texts. "
             "The resulting graph consists of\n"
@@ -925,17 +939,18 @@ class TextReltuples:
     def dictionary(self):
         return self._dict
 
+    @staticmethod
     def _cluster(
-        self, min_cluster_size=10, max_cluster_size=100, cluster_size_step=10
+        reltuples: Sequence[SentenceReltuples],
+        min_cluster_size=10,
+        max_cluster_size=100,
+        cluster_size_step=10,
     ) -> List[int]:
         X = np.array(
-            [
-                sentence_reltuples.sentence_vector
-                for sentence_reltuples in self._reltuples
-            ]
+            [sentence_reltuples.sentence_vector for sentence_reltuples in reltuples]
         )
         max_sil_score = -1
-        n_sentences = len(self._reltuples)
+        n_sentences = len(reltuples)
         res_labels = np.zeros(n_sentences)
         for cluster_size in range(
             min_cluster_size, max_cluster_size, cluster_size_step
@@ -952,13 +967,6 @@ class TextReltuples:
                 max_sil_score = score
                 res_labels = clusterer.labels_
         return res_labels.tolist()
-
-
-def _to_set_if_not_already(value: Union[T, Iterable[T]]) -> Set[T]:
-    if isinstance(value, (str, int, float)):
-        return {value}
-    else:
-        return set(value)
 
 
 @njit()
