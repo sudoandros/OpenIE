@@ -200,15 +200,7 @@ class RelGraph:
             key = f"{lemmas} + {deprel}"
         description = set(description)
         cluster = set(cluster)
-        if not self._graph.has_edge(source, target, key=key):
-            # it's a new edge
-            color = {"b": 0, "g": 0, "r": 0}
-            if label == "_is_a_":
-                color = {"b": 160, "g": 160, "r": 255}
-            elif label == "_relates_to_":
-                color = {"b": 160, "g": 255, "r": 160}
-            else:
-                color = {"b": 255, "g": 0, "r": 0}
+        if not self._graph.has_edge(source, target, key=key):  # it's a new edge
             self._graph.add_edge(
                 source,
                 target,
@@ -219,10 +211,8 @@ class RelGraph:
                 description=description,
                 weight=weight,
                 cluster=cluster,
-                viz={"color": color},
             )
-        else:
-            # this edge already exists
+        else:  # this edge already exists
             self._graph[source][target][key]["description"] = (
                 description | self._graph[source][target][key]["description"]
             )
@@ -811,15 +801,20 @@ class RelGraph:
         for node in res:
             res.nodes[node]["node_type"] = "argument"
         for source, target, key, attr in list(res.edges(data=True, keys=True)):
-            # FIXME shouldn't it include cluster number?
-            node = "{rel}({s}; {t})".format(
-                rel=res.edges[source, target, key]["label"], s=source, t=target
-            )
+            label = res.edges[source, target, key]["label"]
+            node = f"{label}({source}; {target})"  # FIXME shouldn't it include cluster number?
             new_attr = deepcopy(attr)
             new_attr["node_type"] = "relation"
             new_attr["weight"] = min(
                 res.nodes[source]["weight"], res.nodes[target]["weight"]
             )
+            if label == "_is_a_":
+                color = {"b": 160, "g": 160, "r": 255}
+            elif label == "_relates_to_":
+                color = {"b": 160, "g": 255, "r": 160}
+            else:
+                color = {"b": 255, "g": 0, "r": 0}
+            new_attr["viz"] = {"color": color}
             res.add_node(node, **new_attr)
             res.add_edge(source, node)
             res.add_edge(node, target)
