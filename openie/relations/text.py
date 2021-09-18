@@ -465,7 +465,7 @@ class RelGraph:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
                 continue
             source_labels = self._graph.nodes[s]["label"]
-            edge_labels = self._graph[s][t][k]["label"]
+            edge_labels = self._graph[s][t][k]["label"].split(" | ")
             for labels in product(source_labels, edge_labels):
                 labels_edges_dict.setdefault(labels, set()).add((s, t, k))
 
@@ -499,7 +499,7 @@ class RelGraph:
         for s, t, k in self._graph.edges:
             if self._graph[s][t][k]["label"] in ["_is_a_", "_relates_to_"]:
                 continue
-            edge_labels = self._graph[s][t][k]["label"]
+            edge_labels = self._graph[s][t][k]["label"].split(" | ")
             target_labels = self._graph.nodes[t]["label"]
             for labels in product(edge_labels, target_labels):
                 labels_edges_dict.setdefault(labels, set()).add((s, t, k))
