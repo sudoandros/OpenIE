@@ -1,23 +1,11 @@
-import os
-
-os.environ["FOR_DISABLE_CONSOLE_CTRL_HANDLER"] = "1"
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from pathlib import Path
 
+import typer
 import chardet
 import gensim.downloader
-from flask import (
-    Flask,
-    redirect,
-    render_template,
-    request,
-    send_from_directory,
-    url_for,
-)
-from flask_wtf import FlaskForm
-from wtforms import BooleanField, IntegerField, MultipleFileField, SubmitField
 
 import openie.syntax
 from openie.relations.text import TextReltuples
@@ -28,13 +16,9 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 
-app = Flask(__name__)
-app.config.from_file("config.json", load=json.load)
-TZ_MOSCOW = timezone(timedelta(hours=3))
-UDPIPE_MODEL = openie.syntax.UDPipeModel(app.config["UDPIPE_MODEL"])
-W2V_MODEL = gensim.downloader.load("word2vec-ruscorpora-300")
-with open("stopwords.txt", mode="r", encoding="utf-8") as file:
-    STOPWORDS = file.read().split()
+cli = typer.Typer(add_completion=False)
+with open("config.json", mode="r") as f:
+    config = json.load(f)
 
 
 def guess_encoding(content):
@@ -45,90 +29,57 @@ def guess_encoding(content):
         return "cp1251"
 
 
-class TextForm(FlaskForm):
-    text_files = MultipleFileField("Текстовые файлы для обработки")
-    entities_limit = IntegerField(
-        "Максимальное количество извлеченных сущностей",
-        default=app.config["ENTITIES_LIMIT"],
-    )
-    is_conllu = BooleanField(
-        "Содержимое является синтаксически разобранным текстом в формате CoNLL-U"
-    )
-    submit = SubmitField("Отправить")
-
-
-@app.route("/", methods=["GET", "POST"])
-def index(title=None):
-    form = TextForm()
-    if form.validate_on_submit():
-        return redirect(url_for("extract"), code=307)
-    return render_template("index.html", title=title, form=form)
-
-
-@app.route("/parse", methods=["POST"])
-def parse():
-    text = request.form["text"]
+@cli.command()
+def parse(filepath: Path):
+    UDPIPE_MODEL = openie.syntax.UDPipeModel(config["UDPIPE_MODEL"])
+    text = filepath.read_text()
     return openie.syntax.parse(text, UDPIPE_MODEL)
 
 
-@app.route("/extract-relations", methods=["POST"])
-def extract():
-    TZ_MOSCOW = timezone(timedelta(hours=3))
-    timestamp = datetime.now(tz=TZ_MOSCOW).strftime("d%Y-%m-%dt%H-%M-%S.%f")
+@cli.command()
+def extract(
+    filepaths: list[Path],
+    is_conllu: bool = False,
+    additional_relations: bool = True,
+    entities_limit: int = 10000,
+):
+    UDPIPE_MODEL = openie.syntax.UDPipeModel(config["UDPIPE_MODEL"])
+    W2V_MODEL = gensim.downloader.load("word2vec-ruscorpora-300")
+    with open("stopwords.txt", mode="r", encoding="utf-8") as file:
+        STOPWORDS = file.read().split()
+    timestamp = datetime.now().strftime("d%Y-%m-%dt%H-%M-%S.%f")
     conllu = ""
-    for text_file in request.files.getlist("text_files"):
-        file_content = text_file.read()
-        encoding = guess_encoding(file_content)
-        text = file_content.decode(encoding)
-        text_format = Path(text_file.filename).suffix[1:]
-        if request.form.get("is_conllu") == "y":
+    for path in filepaths:
+        content = path.read_bytes()
+        encoding = guess_encoding(content)
+        text = content.decode(encoding)
+        if is_conllu:
             new_conllu = text
         else:
-            new_conllu = openie.syntax.parse(text, UDPIPE_MODEL, format_=text_format)
-        conllu = "{}\n{}".format(conllu, new_conllu)
-
-    additional_relations = True
-    entities_limit = int(request.form["entities_limit"])
+            new_conllu = openie.syntax.parse(text, UDPIPE_MODEL, format_=path.suffix)
+        conllu = f"{conllu}\n{new_conllu}"
 
     text_reltuples = TextReltuples(
         conllu, W2V_MODEL, STOPWORDS, additional_relations, entities_limit
     )
-    graph_filename = "{}.gexf".format(timestamp)
-    text_reltuples.graph.save(Path(app.config["GRAPH_DIR"], graph_filename))
+    graph_filename = f"{timestamp}.gexf"
+    text_reltuples.graph.save(Path(config["GRAPH_DIR"], graph_filename))
 
-    json_filename = "{}.json".format(timestamp)
-    with Path(app.config["JSON_DIR"], json_filename).open(
+    json_filename = f"{timestamp}.json"
+    with Path(config["JSON_DIR"], json_filename).open(
         mode="w", encoding="utf-8"
     ) as json_file:
         json.dump(text_reltuples.dictionary, json_file, ensure_ascii=False, indent=4)
 
-    conllu_filename = "{}.conllu".format(timestamp)
-    with Path(app.config["CONLLU_DIR"], conllu_filename).open(
+    conllu_filename = f"{timestamp}.conllu"
+    with Path(config["CONLLU_DIR"], conllu_filename).open(
         mode="w", encoding="utf-8"
     ) as conllu_file:
         conllu_file.write(conllu)
-
-    return render_template(
-        "relations.html",
-        relations_dict=text_reltuples.dictionary,
-        graph_filename=graph_filename,
-        json_filename=json_filename,
-        conllu_filename=conllu_filename,
-    )
-
-
-@app.route("/download/<type_>/<filename>", methods=["GET"])
-def download(type_, filename):
-    if type_ == "graph":
-        directory = app.config["GRAPH_DIR"]
-    elif type_ == "json":
-        directory = app.config["JSON_DIR"]
-    elif type_ == "conllu":
-        directory = app.config["CONLLU_DIR"]
-    else:
-        raise ValueError("Unknown download type")
-    return send_from_directory(directory, filename, as_attachment=True)
+    typer.echo(message=f"Relations graph: {graph_filename}")
+    typer.echo(message=f"Relations JSON: {json_filename}")
+    typer.echo(message=f"Syntax dependency tree: {conllu_filename}")
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host=app.config["HOST"], port=app.config["PORT"])
+    cli()
