@@ -29,7 +29,7 @@ logging.basicConfig(
 )
 
 app = Flask(__name__)
-app.config.from_json("instance/config.json")
+app.config.from_file("config.json", load=json.load)
 TZ_MOSCOW = timezone(timedelta(hours=3))
 UDPIPE_MODEL = openie.syntax.UDPipeModel(app.config["UDPIPE_MODEL"])
 W2V_MODEL = gensim.downloader.load("word2vec-ruscorpora-300")
