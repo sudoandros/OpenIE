@@ -1,4 +1,5 @@
 import io
+from spacy.tokens import Doc
 import logging
 import xml.etree.ElementTree as ET
 from copy import deepcopy
@@ -18,7 +19,6 @@ from typing import (
 import networkx as nx
 import networkx.algorithms.components
 import numpy as np
-import openie.syntax
 from numba import njit
 from openie.relations.sentence import SentenceReltuples
 from sklearn.metrics import silhouette_score
@@ -59,7 +59,7 @@ class RelGraph:
     def _add_sentence_reltuples(
         self, sentence_reltuples: SentenceReltuples, cluster: int
     ):
-        sentence_text = sentence_reltuples.sentence.getText()
+        sentence_text = str(sentence_reltuples.sentence)
         for reltuple in sentence_reltuples:
             source = self._add_node(
                 reltuple.left_arg.lemmas,
@@ -678,7 +678,12 @@ class RelGraph:
             self._graph.nodes[node]["vector"] for node in nodes
         ) / len(nodes)
         new_node = self._add_node(
-            new_lemmas, new_description, new_label, new_weight, new_vector, new_cluster,
+            new_lemmas,
+            new_description,
+            new_label,
+            new_weight,
+            new_vector,
+            new_cluster,
         )
 
         for source, target, key in self._graph.edges(nodes, keys=True):
@@ -883,9 +888,13 @@ class RelGraph:
 
 class TextReltuples:
     def __init__(
-        self, conllu, w2v_model, stopwords, additional_relations, entities_limit,
+        self,
+        parsed_text: Doc,
+        w2v_model,
+        stopwords,
+        additional_relations,
+        entities_limit,
     ):
-        sentences = openie.syntax.read_parsed(conllu, "conllu")
         reltuples = [
             SentenceReltuples(
                 s,
@@ -893,10 +902,10 @@ class TextReltuples:
                 additional_relations=additional_relations,
                 stopwords=stopwords,
             )
-            for s in sentences
+            for s in parsed_text.sents
         ]
         self._dict = {
-            sentence_reltuples.sentence.getText(): [
+            str(sentence_reltuples.sentence): [
                 (
                     reltuple.left_arg.phrase,
                     reltuple.relation.phrase,

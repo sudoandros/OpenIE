@@ -21,14 +21,15 @@ def parse(text, udpipe_model, format_=None):
 
 def clean_text(text, format_=None):
     result = ""
-    if format_ == "htm":
-        result = clean_htm(text)
-    elif format_ == "hdr":
-        result = clean_hdr(text)
-    elif format_ == "sts":
-        result = clean_sts(text)
-    else:
-        result = text
+    match format_:
+        case "htm":
+            result = clean_htm(text)
+        case "hdr":
+            result = clean_hdr(text)
+        case "sts":
+            result = clean_sts(text)
+        case _:
+            result = text
 
     result = re.sub(r"<[^>]+>", "", result)
     result = re.sub(r"\\n+", "\n", result)
@@ -46,7 +47,7 @@ def clean_sts(text):
     result = ""
     matches = re.findall(r"(\d+\s+){6}(.+)", text)
     for m in matches:
-        result = "{}\n{}".format(result, m[1])
+        result = f"{result}\n{m[1]}"
     return result
 
 
@@ -54,7 +55,7 @@ def clean_hdr(text):
     result = ""
     matches = re.findall(r"TEXT_THEMAN_ANNO=(.+)", text)
     for m in matches:
-        result = "{}\n{}".format(result, m)
+        result = f"{result}\n{m}"
     return result
 
 

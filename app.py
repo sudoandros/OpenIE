@@ -1,13 +1,16 @@
 import json
+from spacy.tokens import Doc
+import spacy_conll
 import logging
 from datetime import datetime
 from pathlib import Path
 
-import typer
 import chardet
 import gensim.downloader
+import spacy_udpipe
+import typer
 
-import openie.syntax
+import openie.syntax.spacy_udpipe
 from openie.relations.text import TextReltuples
 
 logging.basicConfig(
@@ -39,28 +42,27 @@ def parse(filepath: Path):
 @cli.command()
 def extract(
     filepaths: list[Path],
-    is_conllu: bool = False,
     additional_relations: bool = True,
     entities_limit: int = 10000,
 ):
-    UDPIPE_MODEL = openie.syntax.UDPipeModel(config["UDPIPE_MODEL"])
-    W2V_MODEL = gensim.downloader.load("word2vec-ruscorpora-300")
+    nlp = spacy_udpipe.load_from_path("ru", config["UDPIPE_MODEL"])
+    nlp.add_pipe("conll_formatter", last=True)
+    w2v_model = gensim.downloader.load("word2vec-ruscorpora-300")
     with open("stopwords.txt", mode="r", encoding="utf-8") as file:
         STOPWORDS = file.read().split()
     timestamp = datetime.now().strftime("d%Y-%m-%dt%H-%M-%S.%f")
-    conllu = ""
+
+    docs: list[Doc] = []
     for path in filepaths:
         content = path.read_bytes()
         encoding = guess_encoding(content)
         text = content.decode(encoding)
-        if is_conllu:
-            new_conllu = text
-        else:
-            new_conllu = openie.syntax.parse(text, UDPIPE_MODEL, format_=path.suffix)
-        conllu = f"{conllu}\n{new_conllu}"
+        parsed_text = openie.syntax.spacy_udpipe.parse(text, nlp, format_=path.suffix)
+        docs.append(parsed_text)
 
+    parsed = Doc.from_docs(docs)
     text_reltuples = TextReltuples(
-        conllu, W2V_MODEL, STOPWORDS, additional_relations, entities_limit
+        parsed, w2v_model, STOPWORDS, additional_relations, entities_limit
     )
     graph_filename = f"{timestamp}.gexf"
     text_reltuples.graph.save(Path(config["GRAPH_DIR"], graph_filename))
@@ -75,7 +77,7 @@ def extract(
     with Path(config["CONLLU_DIR"], conllu_filename).open(
         mode="w", encoding="utf-8"
     ) as conllu_file:
-        conllu_file.write(conllu)
+        conllu_file.write("\n".join(d._.conll_str for d in docs))
     typer.echo(message=f"Relations graph: {graph_filename}")
     typer.echo(message=f"Relations JSON: {json_filename}")
     typer.echo(message=f"Syntax dependency tree: {conllu_filename}")
